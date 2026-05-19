@@ -5,6 +5,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var controlPanelWindow: NSWindow?
+    private let controlPanelNavigation = ControlPanelNavigation()
     private var displayChangeObserver: NSObjectProtocol?
     private var store: BridgeStore?
     private var startupError: Error?
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         NSApp.setActivationPolicy(.accessory)
         installStatusItem()
         installDisplayChangeObserver()
+        redirectApplicationSettingsMenu()
         bootstrapStore()
     }
 
@@ -127,6 +129,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
+    private func redirectApplicationSettingsMenu() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  let item = NSApp.mainMenu?.items.first?.submenu?.items.first(where: { item in
+                      item.keyEquivalent == ","
+                  })
+            else {
+                return
+            }
+
+            item.target = self
+            item.action = #selector(openSettings)
+        }
+    }
+
     private func rebuildMenu(_ menu: NSMenu? = nil) {
         guard let menu = menu ?? statusItem?.menu else {
             return
@@ -172,6 +189,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     @objc private func openControlPanel() {
+        showControlPanel(selection: .wallpaper)
+    }
+
+    @objc func openSettings() {
+        showControlPanel(selection: .settings)
+    }
+
+    private func showControlPanel(selection: SidebarSelection) {
+        controlPanelNavigation.selection = selection
         NSApp.setActivationPolicy(.regular)
 
         if let controlPanelWindow {
@@ -194,7 +220,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.delegate = self
         window.isReleasedWhenClosed = false
         if let store {
-            window.contentViewController = NSHostingController(rootView: AnyView(ControlPanelView(store: store)))
+            window.contentViewController = NSHostingController(
+                rootView: AnyView(
+                    ControlPanelView(
+                        store: store,
+                        navigation: controlPanelNavigation
+                    )
+                )
+            )
         } else {
             window.contentViewController = NSHostingController(
                 rootView: AnyView(BridgeUnavailableView(error: startupError ?? lastError))

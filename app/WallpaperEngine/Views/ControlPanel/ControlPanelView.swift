@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 enum SidebarSelection: String, CaseIterable, Identifiable {
@@ -24,14 +25,28 @@ enum SidebarSelection: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
+final class ControlPanelNavigation: ObservableObject {
+    @Published var selection: SidebarSelection?
+
+    init(selection: SidebarSelection? = .wallpaper) {
+        self.selection = selection
+    }
+}
+
 struct ControlPanelView: View {
     let store: BridgeStore
-    @State private var selection: SidebarSelection? = .wallpaper
+    @ObservedObject private var navigation: ControlPanelNavigation
     @State private var presentedError: ControlPanelError?
+
+    init(store: BridgeStore, navigation: ControlPanelNavigation) {
+        self.store = store
+        self.navigation = navigation
+    }
 
     var body: some View {
         NavigationSplitView {
-            List(SidebarSelection.allCases, selection: $selection) { item in
+            List(SidebarSelection.allCases, selection: $navigation.selection) { item in
                 Label(item.title, systemImage: item.systemImage)
                     .tag(item)
             }
@@ -39,7 +54,7 @@ struct ControlPanelView: View {
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } content: {
-            switch selection {
+            switch navigation.selection {
             case .wallpaper, .none:
                 WallpaperPageView()
             case .display:
@@ -48,7 +63,7 @@ struct ControlPanelView: View {
                 SettingsView()
             }
         } detail: {
-            if selection == .wallpaper || selection == nil {
+            if navigation.selection == .wallpaper || navigation.selection == nil {
                 WallpaperInspectorView()
             } else {
                 EmptyView()
