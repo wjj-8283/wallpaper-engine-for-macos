@@ -22,6 +22,13 @@ fn assert_f32_close(actual: f32, expected: f32) {
     );
 }
 
+fn assert_f64_close(actual: f64, expected: f64) {
+    assert!(
+        (actual - expected).abs() <= f64::EPSILON,
+        "expected {actual} to be within f64::EPSILON of {expected}"
+    );
+}
+
 #[tokio::test]
 async fn apply_options_clears_dirty_state() {
     let engine = FakeEngineFacade::default();
@@ -257,7 +264,7 @@ async fn scaling_factor_edit_updates_draft_and_apply_persists_without_reconcile(
         .await
         .unwrap();
     assert!(edited.dirty);
-    assert_eq!(edited.display_configurations[0].scaling_factor, 1.25);
+    assert_f64_close(edited.display_configurations[0].scaling_factor, 1.25);
 
     bridge
         .apply_wallpaper_options("100".to_string())
@@ -291,7 +298,7 @@ async fn scaling_factor_edit_updates_draft_and_apply_persists_without_reconcile(
         .await
         .unwrap();
     assert!(!persisted.dirty);
-    assert_eq!(persisted.display_configurations[0].scaling_factor, 1.25);
+    assert_f64_close(persisted.display_configurations[0].scaling_factor, 1.25);
 }
 
 #[tokio::test]
@@ -320,7 +327,7 @@ async fn scaling_factor_edit_rejects_non_positive_and_non_finite_values() {
         .await
         .unwrap();
     assert!(!options.dirty);
-    assert_eq!(options.display_configurations[0].scaling_factor, 1.0);
+    assert_f64_close(options.display_configurations[0].scaling_factor, 1.0);
 }
 
 #[tokio::test]

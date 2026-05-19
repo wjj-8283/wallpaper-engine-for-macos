@@ -469,6 +469,23 @@
         }
       }
     },
+    "Link" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "链接"
+          }
+        }
+      }
+    },
     "Match" : {
       "localizations" : {
         "en" : {
@@ -739,6 +756,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "场景"
+          }
+        }
+      }
+    },
+    "Project URL" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目地址"
           }
         }
       }

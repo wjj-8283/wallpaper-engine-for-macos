@@ -15,6 +15,15 @@ use crate::{
 };
 
 const MIRROR_DISPLAY_MODE: &str = "mirror";
+const UNKNOWN_GIT_SHA: &str = "Unknown";
+
+fn build_value(value: &'static str, fallback: &'static str) -> String {
+    if value.trim().is_empty() {
+        fallback.to_string()
+    } else {
+        value.to_string()
+    }
+}
 
 impl BridgeActorState {
     #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
@@ -276,7 +285,7 @@ impl BridgeActorState {
                 })
                 .collect()
         };
-        let version = env!("CARGO_PKG_VERSION").to_string();
+        let crate_version = env!("CARGO_PKG_VERSION").to_string();
 
         BridgeSettingsSnapshot {
             displays: rows,
@@ -288,10 +297,25 @@ impl BridgeActorState {
                 LaunchAtLoginStatus::Available { enabled } => enabled,
                 LaunchAtLoginStatus::Unavailable => false,
             },
-            app_version: version.clone(),
-            git_sha: option_env!("GIT_SHA").unwrap_or("Unknown").to_string(),
-            bridge_version: version.clone(),
-            core_version: version,
+            app_version: build_value(crate::build::VERSION, env!("CARGO_PKG_VERSION")),
+            git_sha: build_value(
+                option_env!("GIT_SHORT_COMMIT").unwrap_or(crate::build::SHORT_COMMIT),
+                UNKNOWN_GIT_SHA,
+            ),
+            bridge_version: crate_version.clone(),
+            core_version: crate_version,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_value;
+
+    #[test]
+    fn build_value_uses_fallback_for_empty_values() {
+        assert_eq!(build_value("abc123", "fallback"), "abc123");
+        assert_eq!(build_value("", "fallback"), "fallback");
+        assert_eq!(build_value("   ", "fallback"), "fallback");
     }
 }

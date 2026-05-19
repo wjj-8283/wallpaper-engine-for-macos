@@ -99,6 +99,7 @@
           buildPhase = ''
             runHook preBuild
 
+            export GIT_SHORT_COMMIT=${self.shortRev or self.dirtyShortRev}
             ${apple-libs.fakeHomeSetupScript}
 
             cargo build --workspace --release

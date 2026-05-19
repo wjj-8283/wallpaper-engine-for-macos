@@ -27,4 +27,8 @@ pub use api::{
     BridgeWallpaperOptionsSnapshot, WallpaperBridge,
 };
 
+mod build {
+    include!(concat!(env!("OUT_DIR"), "/shadow.rs"));
+}
+
 uniffi::setup_scaffolding!();
