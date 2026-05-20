@@ -38,8 +38,10 @@ use crate::{
             GetLibrarySnapshot, GetMonitorInformationSnapshot, GetSettingsSnapshot,
             GetWallpaperOptionsSnapshot, RefreshDisplays, RefreshLibrary, RestorePropertyDefault,
             SelectWallpaper, SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled,
-            SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorTarget,
-            SetMuted, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, Shutdown,
+            SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted,
+            SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
+            SetMirrorVolume, SetMuted, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume,
+            Shutdown,
         },
         state::BridgeActorState,
     },
@@ -585,6 +587,70 @@ impl WallpaperBridge {
 
     /// # Errors
     ///
+    /// Returns an error when the display id is unknown, not in mirror mode, or
+    /// the display update fails.
+    pub async fn set_mirror_scaling_mode(
+        &self,
+        display_id: String,
+        mode: BridgeScalingMode,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor
+            .ask(SetMirrorScalingMode { display_id, mode })
+            .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the display id is unknown, not in mirror mode, the
+    /// factor is invalid, or the display update fails.
+    pub async fn set_mirror_scaling_factor(
+        &self,
+        display_id: String,
+        factor: f64,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor
+            .ask(SetMirrorScalingFactor { display_id, factor })
+            .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the display id is unknown, not in mirror mode, or
+    /// the display update fails.
+    pub async fn set_mirror_target_fps(
+        &self,
+        display_id: String,
+        fps: u32,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor.ask(SetMirrorTargetFps { display_id, fps }).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the display id is unknown, not in mirror mode, the
+    /// volume is invalid, or the display update fails.
+    pub async fn set_mirror_volume(
+        &self,
+        display_id: String,
+        volume: f32,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor.ask(SetMirrorVolume { display_id, volume }).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the display id is unknown, not in mirror mode, or
+    /// the display update fails.
+    pub async fn set_mirror_muted(
+        &self,
+        display_id: String,
+        muted: bool,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor.ask(SetMirrorMuted { display_id, muted }).await
+    }
+
+    /// # Errors
+    ///
     /// Returns an error when launch at login is unavailable or
     /// `ServiceManagement` rejects the update.
     pub async fn set_launch_at_login(
@@ -828,6 +894,17 @@ impl From<BridgeScalingMode> for ScalingMode {
             BridgeScalingMode::Stretch => Self::Stretch,
             BridgeScalingMode::Match => Self::Fit,
             BridgeScalingMode::Fill => Self::Fill,
+        }
+    }
+}
+
+impl From<ScalingMode> for BridgeScalingMode {
+    fn from(value: ScalingMode) -> Self {
+        match value {
+            ScalingMode::None => Self::None,
+            ScalingMode::Stretch => Self::Stretch,
+            ScalingMode::Fit => Self::Match,
+            ScalingMode::Fill => Self::Fill,
         }
     }
 }

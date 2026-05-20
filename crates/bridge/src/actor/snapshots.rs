@@ -12,7 +12,7 @@ use crate::{
         bridge_log_status,
     },
     config::SerializedSelector,
-    display::{DisplayLabelExt, DisplaySnapshotExt},
+    display::{DisplayLabelExt, DisplaySelectorExt, DisplaySnapshotExt},
     logging::{ApplicationLogger, LogStatus},
     login::LaunchAtLoginStatus,
     paths::BridgePaths,
@@ -150,6 +150,8 @@ impl BridgeActorState {
                     scaling_factor: render.scaling_factor,
                     target_fps: render.fps.min(max_fps),
                     max_fps,
+                    muted: config.audio.muted,
+                    volume: config.audio.volume,
                     dirty: render_dirty || draft.display_dirty(selector, &active_enabled_displays),
                     can_restore_defaults: render != &default_render
                         || draft.display_dirty(selector, &active_enabled_displays),
@@ -182,25 +184,46 @@ impl BridgeActorState {
             .filter(|row| {
                 row.connected
                     && row.config.enabled
-                    && row.config.mode != MIRROR_DISPLAY_MODE
-                    && row.config.wallpaper.is_some()
+                    && (row.config.wallpaper.is_some()
+                        || row.config.mode == MIRROR_DISPLAY_MODE
+                            && row.config.mirror_target.is_some())
             })
             .filter_map(|row| {
                 let display = row.display_index.and_then(|index| displays.get(index))?;
-                let wallpaper_id = row.config.wallpaper.as_ref()?;
+                let mirror_target = if row.config.mode == MIRROR_DISPLAY_MODE {
+                    row.config.mirror_target.as_ref()
+                } else {
+                    None
+                };
+                let target_display = mirror_target
+                    .and_then(|selector| selector.to_selector().resolve_display(displays));
+                let target_config_selector =
+                    target_display.map(|display| display.config_selector(displays));
+                let target_row = target_config_selector.as_ref().and_then(|selector| {
+                    app_config
+                        .monitor_rows(displays)
+                        .into_iter()
+                        .find(|candidate| candidate.selector == *selector)
+                });
+                let wallpaper_id = row.config.wallpaper.as_ref().or_else(|| {
+                    target_row
+                        .as_ref()
+                        .and_then(|target| target.config.wallpaper.as_ref())
+                })?;
                 let wallpaper_title = self
                     .library
                     .iter()
                     .find(|entry| entry.id == *wallpaper_id)
                     .map_or_else(|| wallpaper_id.clone(), |entry| entry.title.clone());
+                let render_selector = target_config_selector.as_ref().unwrap_or(&row.selector);
                 let render = self.wallpaper_configs.get(wallpaper_id).and_then(|config| {
                     config
                         .monitors
                         .iter()
-                        .find(|render| render.selector == row.selector)
+                        .find(|render| render.selector == *render_selector)
                 });
                 let default_render = crate::config::MonitorRender {
-                    selector: row.selector.clone(),
+                    selector: render_selector.clone(),
                     ..crate::config::MonitorRender::default()
                 };
                 let render = render.unwrap_or(&default_render);
@@ -220,6 +243,14 @@ impl BridgeActorState {
                     title,
                     wallpaper_id: wallpaper_id.clone(),
                     wallpaper_title,
+                    mirror_target_display_id: target_config_selector
+                        .as_ref()
+                        .map(SerializedSelector::id),
+                    mirror_target_title: target_display.map(|display| {
+                        let primary =
+                            target_config_selector.as_ref() == Some(&SerializedSelector::Primary);
+                        display.title_with_role(primary)
+                    }),
                     scaling_mode: scaling_mode.to_string(),
                     target_fps: render
                         .fps
@@ -286,6 +317,17 @@ impl BridgeActorState {
                     } else {
                         None
                     };
+                    let settings = app_config
+                        .monitor_settings
+                        .iter()
+                        .find(|settings| settings.selector == row.selector)
+                        .cloned()
+                        .unwrap_or_else(|| crate::config::MonitorSettingsCfg {
+                            selector: row.selector.clone(),
+                            ..crate::config::MonitorSettingsCfg::default()
+                        });
+                    let scaling_mode = BridgeScalingMode::from(settings.parse_scaling_mode());
+                    let max_fps = entry.desc.refresh_rate_hz.max(1);
 
                     Some(BridgeDisplaySettingsRow {
                         display_id: row.selector.id(),
@@ -308,6 +350,12 @@ impl BridgeActorState {
                             .map(|display| display.config_selector(displays).id())
                             .collect(),
                         selected_mirror_target,
+                        scaling_mode,
+                        scaling_factor: settings.scaling_factor,
+                        target_fps: settings.target_fps.min(max_fps),
+                        max_fps,
+                        muted: settings.muted,
+                        volume: settings.volume,
                     })
                 })
                 .collect()

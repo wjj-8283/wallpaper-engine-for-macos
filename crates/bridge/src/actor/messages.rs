@@ -89,6 +89,31 @@ pub struct SetMirrorTarget {
     pub target_display_id: String,
 }
 
+pub struct SetMirrorScalingMode {
+    pub display_id: String,
+    pub mode: BridgeScalingMode,
+}
+
+pub struct SetMirrorScalingFactor {
+    pub display_id: String,
+    pub factor: f64,
+}
+
+pub struct SetMirrorTargetFps {
+    pub display_id: String,
+    pub fps: u32,
+}
+
+pub struct SetMirrorVolume {
+    pub display_id: String,
+    pub volume: f32,
+}
+
+pub struct SetMirrorMuted {
+    pub display_id: String,
+    pub muted: bool,
+}
+
 pub struct EjectWallpaperFromDisplay {
     pub display_id: String,
     pub wallpaper_id: String,
@@ -205,6 +230,11 @@ pub type DisplayMutationReply = Result<BridgeDisplayMutationBundle, crate::api::
 pub type SetDisplayEnabledReply = DisplayMutationReply;
 pub type SetDisplayModeReply = DisplayMutationReply;
 pub type SetMirrorTargetReply = DisplayMutationReply;
+pub type SetMirrorScalingModeReply = DisplayMutationReply;
+pub type SetMirrorScalingFactorReply = DisplayMutationReply;
+pub type SetMirrorTargetFpsReply = DisplayMutationReply;
+pub type SetMirrorVolumeReply = DisplayMutationReply;
+pub type SetMirrorMutedReply = DisplayMutationReply;
 pub type EjectWallpaperFromDisplayReply = DisplayMutationReply;
 pub type SetGlobalPlaybackReply = AllSnapshotsReply;
 pub type ShutdownReply = Result<(), BridgeError>;

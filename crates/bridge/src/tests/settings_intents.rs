@@ -4,17 +4,34 @@ use std::{
 };
 
 use wallpaper_core::{
-    DisplayDesc, DisplayIdentity, DisplaySelector, DisplaySnapshotEntry, WallpaperAssignment,
+    DisplayDesc, DisplayIdentity, DisplaySelector, DisplaySnapshotEntry, project::SceneHandle,
 };
 
 use crate::{
-    BridgeDisplayMode, BridgeErrorKind, BridgePropertyValue, BridgeWallpaperKind, WallpaperBridge,
+    BridgeDisplayMode, BridgeErrorKind, BridgePropertyValue, BridgeScalingMode,
+    BridgeWallpaperKind, WallpaperBridge,
     api::BridgeBuilder,
-    config::{AppConfig, ConfigStore, MonitorCfg, SerializedSelector, WallpaperConfig},
+    config::{
+        AppConfig, ConfigStore, MonitorCfg, MonitorSettingsCfg, SerializedSelector, WallpaperConfig,
+    },
     engine::FakeEngineFacade,
     login::{LaunchAtLoginController, LaunchAtLoginStatus},
     paths::BridgePaths,
 };
+
+fn assert_f32_close(actual: f32, expected: f32) {
+    assert!(
+        (actual - expected).abs() <= f32::EPSILON,
+        "expected {actual} to be within f32::EPSILON of {expected}"
+    );
+}
+
+fn assert_f64_close(actual: f64, expected: f64) {
+    assert!(
+        (actual - expected).abs() <= f64::EPSILON,
+        "expected {actual} to be within f64::EPSILON of {expected}"
+    );
+}
 
 #[tokio::test]
 async fn display_settings_commit_persists_reconciles_and_clears_stale_wallpaper_drafts() {
@@ -151,7 +168,6 @@ async fn control_plane_stays_responsive_when_display_setting_reconcile_is_in_fli
 async fn later_display_mutation_wins_when_multiple_reconciles_start_from_same_generation() {
     let primary = identified_display("primary", 1);
     let secondary = identified_display("secondary", 3);
-    let secondary_selector = DisplaySelector::Identity(secondary.identity.clone());
     let root = tempfile::tempdir().unwrap();
     let store = ConfigStore::open(root.path().to_path_buf());
     store
@@ -237,17 +253,7 @@ async fn later_display_mutation_wins_when_multiple_reconciles_start_from_same_ge
     );
     assert_eq!(display.mode, BridgeDisplayMode::Mirror);
     assert_eq!(display.selected_mirror_target.as_deref(), Some("primary"));
-    assert_eq!(
-        engine.window_create_calls().last(),
-        Some(&secondary_selector.clone())
-    );
-    assert_eq!(
-        engine.wallpaper_calls().last(),
-        Some(&(
-            secondary_selector,
-            WallpaperAssignment::Mirror(DisplaySelector::Primary),
-        ))
-    );
+    assert_latest_scene(&engine, 3, "100");
 }
 
 #[tokio::test]
@@ -1210,13 +1216,7 @@ async fn mirror_display_setting_sends_mirror_assignment_to_engine() {
         .await
         .expect("secondary mirror should be applied");
 
-    assert_eq!(
-        engine.wallpaper_calls(),
-        vec![(
-            DisplaySelector::Identity(secondary.identity),
-            WallpaperAssignment::Mirror(DisplaySelector::Primary),
-        )]
-    );
+    assert_latest_scene(&engine, secondary.desc.display_id, "100");
 }
 
 #[tokio::test]
@@ -1224,7 +1224,6 @@ async fn selecting_mirror_target_for_disabled_secondary_creates_render_window() 
     let primary = identified_display("primary", 1);
     let mut secondary = identified_display("secondary", 3);
     secondary.window_active = false;
-    let secondary_identity = secondary.identity.clone();
     let root = tempfile::tempdir().unwrap();
     let store = ConfigStore::open(root.path().to_path_buf());
     store
@@ -1257,19 +1256,8 @@ async fn selecting_mirror_target_for_disabled_secondary_creates_render_window() 
         .await
         .expect("mirror target should activate the secondary display");
 
-    let secondary_selector = DisplaySelector::Identity(secondary_identity);
     assert_display_enabled(&bridge, &secondary_display_id, true).await;
-    assert_eq!(
-        engine.window_create_calls(),
-        vec![secondary_selector.clone()]
-    );
-    assert_eq!(
-        engine.wallpaper_calls(),
-        vec![(
-            secondary_selector,
-            WallpaperAssignment::Mirror(DisplaySelector::Primary),
-        )]
-    );
+    assert_latest_scene(&engine, 3, "100");
 }
 
 #[tokio::test]
@@ -1315,19 +1303,11 @@ async fn bootstrap_restores_mirror_display_window_from_saved_settings() {
         .expect("tokio runtime and config load for wallpaper bridge");
 
     bridge.bootstrap().await.unwrap();
+    bridge
+        .inject_scene_wallpaper_config_for_test("100", "Scene")
+        .await;
 
-    let expected_selector = DisplaySelector::Identity(secondary_identity);
-    assert_eq!(
-        engine.window_create_calls(),
-        vec![expected_selector.clone()]
-    );
-    assert_eq!(
-        engine.wallpaper_calls(),
-        vec![(
-            expected_selector,
-            WallpaperAssignment::Mirror(DisplaySelector::Primary),
-        )]
-    );
+    assert_latest_scene(&engine, 3, "100");
 }
 
 #[tokio::test]
@@ -1385,35 +1365,7 @@ async fn applying_wallpaper_options_restores_existing_mirror_window_after_reconc
         .await
         .unwrap();
     assert!(done.wait(std::time::Duration::from_secs(2)));
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    let expected = vec![(
-        DisplaySelector::Identity(secondary_identity.clone()),
-        WallpaperAssignment::Mirror(DisplaySelector::Primary),
-    )];
-    loop {
-        let calls = engine.wallpaper_calls();
-        if calls == expected {
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "expected wallpaper calls {expected:?}, got {calls:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-
-    let expected_selector = DisplaySelector::Identity(secondary_identity);
-    assert_eq!(
-        engine.window_create_calls(),
-        vec![expected_selector.clone()]
-    );
-    assert_eq!(
-        engine.wallpaper_calls(),
-        vec![(
-            expected_selector,
-            WallpaperAssignment::Mirror(DisplaySelector::Primary),
-        )]
-    );
+    assert_latest_scene(&engine, 3, "100");
 }
 
 #[tokio::test]
@@ -1614,6 +1566,35 @@ async fn eject_wallpaper_from_display_only_disables_that_monitor_assignment() {
     let info = bridge.monitor_information_snapshot().await.unwrap();
     assert!(info.rows.iter().all(|row| row.wallpaper_id != "100"));
     assert!(info.rows.iter().any(|row| row.wallpaper_id == "200"));
+}
+
+#[tokio::test]
+async fn monitor_information_includes_mirror_rows_with_target_metadata() {
+    let (bridge, _engine, secondary_display_id) = mirrored_wallpaper_bridge().await;
+
+    let info = bridge.monitor_information_snapshot().await.unwrap();
+
+    assert_eq!(info.rows.len(), 2);
+    let primary = info
+        .rows
+        .iter()
+        .find(|row| row.display_id == "primary")
+        .expect("primary active wallpaper row");
+    assert_eq!(primary.wallpaper_id, "100");
+    assert_eq!(primary.mirror_target_display_id, None);
+    assert_eq!(primary.mirror_target_title, None);
+
+    let mirror = info
+        .rows
+        .iter()
+        .find(|row| row.display_id == secondary_display_id)
+        .expect("secondary mirror row");
+    assert_eq!(mirror.wallpaper_id, "100");
+    assert_eq!(mirror.mirror_target_display_id.as_deref(), Some("primary"));
+    assert_eq!(
+        mirror.mirror_target_title.as_deref(),
+        Some("Display primary - Vendor 10 - Model 1 (1 - Primary)")
+    );
 }
 
 #[tokio::test]
@@ -1922,6 +1903,329 @@ async fn settings_row(
         .unwrap_or_else(|| panic!("missing settings row for display {display_id}"))
 }
 
+#[tokio::test]
+async fn wallpaper_options_hide_mirror_display_configuration_rows() {
+    let primary = identified_display("primary", 1);
+    let secondary = identified_display("secondary", 3);
+    let secondary_selector =
+        SerializedSelector::from_selector(&DisplaySelector::Identity(secondary.identity.clone()));
+    let root = tempfile::tempdir().unwrap();
+    let store = ConfigStore::open(root.path().to_path_buf());
+    store
+        .save_app_config(&AppConfig {
+            monitors: vec![
+                MonitorCfg {
+                    selector: SerializedSelector::Primary,
+                    enabled: true,
+                    mode: "independent".to_string(),
+                    wallpaper: Some("100".to_string()),
+                    mirror_target: None,
+                },
+                MonitorCfg {
+                    selector: secondary_selector,
+                    enabled: true,
+                    mode: "mirror".to_string(),
+                    wallpaper: None,
+                    mirror_target: Some(SerializedSelector::Primary),
+                },
+            ],
+            ..AppConfig::default()
+        })
+        .unwrap();
+    store
+        .save_wallpaper(&WallpaperConfig::new_for("100", "scene"))
+        .unwrap();
+
+    let engine = FakeEngineFacade::default();
+    engine.set_snapshot(vec![primary, secondary]);
+    let bridge = BridgeBuilder::new(engine)
+        .with_config_store(ConfigStore::open(root.path().to_path_buf()))
+        .build()
+        .expect("tokio runtime and config load for wallpaper bridge");
+    bridge
+        .inject_scene_wallpaper_config_for_test("100", "Scene")
+        .await;
+
+    let options = bridge
+        .wallpaper_options_snapshot("100".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(options.display_configurations.len(), 1);
+    assert_eq!(options.display_configurations[0].display_id, "primary");
+}
+
+#[tokio::test]
+async fn mirror_display_settings_apply_to_concrete_mirror_scene() {
+    let (bridge, engine, secondary_display_id) = mirrored_wallpaper_bridge().await;
+
+    let mirror = latest_scene(&engine, 3);
+    assert!(mirror.audio_response_enabled);
+    assert_f32_close(f32::from(mirror.audio_volume), 0.2);
+    assert!(mirror.audio_muted);
+    assert_eq!(
+        mirror.scaling_mode,
+        wallpaper_core::project::ScalingMode::Fill
+    );
+    assert_f64_close(mirror.scaling_factor, 1.25);
+    assert_eq!(mirror.fps, 30);
+
+    let calls_before = engine.calls().len();
+    bridge
+        .set_mirror_volume(secondary_display_id.clone(), 0.6)
+        .await
+        .unwrap();
+    bridge
+        .set_mirror_muted(secondary_display_id.clone(), false)
+        .await
+        .unwrap();
+    bridge
+        .set_mirror_scaling_mode(secondary_display_id.clone(), BridgeScalingMode::Stretch)
+        .await
+        .unwrap();
+    bridge
+        .set_mirror_scaling_factor(secondary_display_id.clone(), 1.5)
+        .await
+        .unwrap();
+    bridge
+        .set_mirror_target_fps(secondary_display_id.clone(), 45)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        engine.calls().len(),
+        calls_before,
+        "mirror display-local controls must not reconstruct scenes"
+    );
+    assert_eq!(
+        engine.audio_volume_calls().last(),
+        Some(&(SceneHandle::new(2), 0.6))
+    );
+    assert_eq!(
+        engine.audio_muted_calls().last(),
+        Some(&(SceneHandle::new(2), false))
+    );
+    assert_eq!(
+        engine.scaling_mode_calls().last(),
+        Some(&(
+            SceneHandle::new(2),
+            wallpaper_core::project::ScalingMode::Stretch
+        ))
+    );
+    assert_eq!(
+        engine.scaling_factor_calls().last(),
+        Some(&(SceneHandle::new(2), 1.5))
+    );
+    assert_eq!(engine.fps_calls().last(), Some(&(SceneHandle::new(2), 45)));
+
+    let row = settings_row(&bridge, &secondary_display_id).await;
+    assert_f32_close(row.volume, 0.6);
+    assert!(!row.muted);
+    assert_eq!(row.scaling_mode, BridgeScalingMode::Stretch);
+    assert_f64_close(row.scaling_factor, 1.5);
+    assert_eq!(row.target_fps, 45);
+}
+
+#[tokio::test]
+async fn active_display_live_scaling_update_does_not_reconcile_on_next_refresh() {
+    let primary = identified_display("primary", 1);
+    let root = tempfile::tempdir().unwrap();
+    let store = ConfigStore::open(root.path().to_path_buf());
+    store
+        .save_app_config(&AppConfig {
+            monitors: vec![MonitorCfg {
+                selector: SerializedSelector::Primary,
+                enabled: true,
+                mode: "independent".to_string(),
+                wallpaper: Some("100".to_string()),
+                mirror_target: None,
+            }],
+            ..AppConfig::default()
+        })
+        .unwrap();
+    store
+        .save_wallpaper(&WallpaperConfig::new_for("100", "scene"))
+        .unwrap();
+
+    let engine = FakeEngineFacade::default();
+    engine.set_snapshot_after_refresh(vec![primary]);
+    let bridge = BridgeBuilder::new(engine.clone())
+        .with_config_store(ConfigStore::open(root.path().to_path_buf()))
+        .build()
+        .expect("tokio runtime and config load for wallpaper bridge");
+    bridge
+        .inject_scene_wallpaper_config_for_test("100", "Scene")
+        .await;
+
+    bridge.refresh_displays().await.unwrap();
+    let initial_scene = engine.calls()[0][0].clone();
+    let active_snapshot = vec![DisplaySnapshotEntry {
+        identity: initial_scene.display.identity.clone(),
+        desc: initial_scene.display.clone(),
+        handle: Some(SceneHandle::new(1)),
+        window_active: true,
+        assignment: Some(wallpaper_core::WallpaperAssignment::Direct(
+            wallpaper_core::project::SceneTemplate::from_scene_desc(&initial_scene),
+        )),
+    }];
+    engine.set_snapshot(active_snapshot.clone());
+    engine.set_snapshot_after_refresh(active_snapshot);
+    bridge
+        .set_scaling_mode(
+            "100".to_string(),
+            "primary".to_string(),
+            BridgeScalingMode::Stretch,
+        )
+        .await
+        .unwrap();
+    let calls_before = engine.calls().len();
+
+    bridge.refresh_displays().await.unwrap();
+
+    assert_eq!(
+        engine.calls().len(),
+        calls_before,
+        "refresh after an active live scaling update must not rebuild the scene"
+    );
+}
+
+#[tokio::test]
+async fn mirror_scene_tracks_source_rebuild_settings_except_monitor_overrides() {
+    let (bridge, engine, secondary_display_id) = mirrored_wallpaper_bridge().await;
+
+    bridge
+        .set_mirror_volume(secondary_display_id, 0.6)
+        .await
+        .unwrap();
+    bridge
+        .inject_scene_project_for_test(
+            "100",
+            "Scene",
+            r#"{
+            "type":"scene",
+            "title":"Scene",
+            "general":{"properties":{
+                "enabled":{"type":"bool","text":"Enabled","value":false}
+            }}
+        }"#,
+        )
+        .await;
+    bridge
+        .set_scaling_mode(
+            "100".to_string(),
+            "primary".to_string(),
+            BridgeScalingMode::Stretch,
+        )
+        .await
+        .unwrap();
+    bridge
+        .edit_scaling_factor("100".to_string(), "primary".to_string(), 1.75)
+        .await
+        .unwrap();
+    bridge
+        .edit_property(
+            "100".to_string(),
+            "enabled".to_string(),
+            BridgePropertyValue::Bool { value: true },
+        )
+        .await
+        .unwrap();
+    let done = engine.wait_for_next_reconcile();
+    bridge
+        .apply_wallpaper_options("100".to_string())
+        .await
+        .unwrap();
+    assert!(done.wait(std::time::Duration::from_secs(2)));
+    let primary = latest_scene(&engine, 1);
+    let mirror = latest_scene(&engine, 3);
+    assert_eq!(
+        primary.scaling_mode,
+        wallpaper_core::project::ScalingMode::Stretch
+    );
+    assert_f64_close(primary.scaling_factor, 1.75);
+    assert_eq!(
+        mirror.scaling_mode,
+        wallpaper_core::project::ScalingMode::Fill,
+        "mirror display-local scaling mode must override the source display"
+    );
+    assert_f64_close(mirror.scaling_factor, 1.25);
+    assert_eq!(
+        primary.property_override_json.as_deref(),
+        Some(r#"{"enabled":true}"#)
+    );
+    assert_eq!(
+        mirror.property_override_json.as_deref(),
+        Some(r#"{"enabled":true}"#)
+    );
+    assert_f32_close(f32::from(mirror.audio_volume), 0.6);
+    assert!(mirror.audio_muted);
+}
+
+#[tokio::test]
+async fn audio_response_general_setting_updates_active_mirror_scenes() {
+    let primary = active_display("primary", 1, 41, "100");
+    let secondary = active_display("secondary", 3, 42, "100");
+    let secondary_selector =
+        SerializedSelector::from_selector(&DisplaySelector::Identity(secondary.identity.clone()));
+    let root = tempfile::tempdir().unwrap();
+    let store = ConfigStore::open(root.path().to_path_buf());
+    store
+        .save_app_config(&AppConfig {
+            monitors: vec![
+                MonitorCfg {
+                    selector: SerializedSelector::Primary,
+                    enabled: true,
+                    mode: "independent".to_string(),
+                    wallpaper: Some("100".to_string()),
+                    mirror_target: None,
+                },
+                MonitorCfg {
+                    selector: secondary_selector,
+                    enabled: true,
+                    mode: "mirror".to_string(),
+                    wallpaper: None,
+                    mirror_target: Some(SerializedSelector::Primary),
+                },
+            ],
+            ..AppConfig::default()
+        })
+        .unwrap();
+    store
+        .save_wallpaper(&WallpaperConfig::new_for("100", "scene"))
+        .unwrap();
+
+    let engine = FakeEngineFacade::default();
+    engine.set_snapshot(vec![primary, secondary]);
+    let bridge = BridgeBuilder::new(engine.clone())
+        .with_config_store(ConfigStore::open(root.path().to_path_buf()))
+        .build()
+        .expect("tokio runtime and config load for wallpaper bridge");
+    bridge
+        .inject_scene_wallpaper_config_for_test("100", "Scene")
+        .await;
+
+    bridge
+        .set_audio_response_enabled("100".to_string(), true)
+        .await
+        .unwrap();
+
+    let mut expected_calls = vec![(SceneHandle::new(41), true), (SceneHandle::new(42), true)];
+    expected_calls.sort_by_key(|(handle, enabled)| (handle.raw(), *enabled));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let mut calls = engine.audio_capture_calls();
+        calls.sort_by_key(|(handle, enabled)| (handle.raw(), *enabled));
+        if calls == expected_calls {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "expected audio capture calls {expected_calls:?}, got {calls:?}"
+        );
+        thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 async fn two_wallpaper_primary_bridge() -> WallpaperBridge {
     let display = identified_display("primary", 1);
     let root = tempfile::tempdir().unwrap();
@@ -1946,6 +2250,67 @@ async fn two_wallpaper_primary_bridge() -> WallpaperBridge {
         .inject_scene_wallpaper_config_for_test("200", "Wallpaper Set B")
         .await;
     bridge
+}
+
+async fn mirrored_wallpaper_bridge() -> (WallpaperBridge, FakeEngineFacade, String) {
+    let primary = identified_display("primary", 1);
+    let secondary = identified_display("secondary", 3);
+    let secondary_selector =
+        SerializedSelector::from_selector(&DisplaySelector::Identity(secondary.identity.clone()));
+    let secondary_display_id = secondary_selector.id();
+    let root = tempfile::tempdir().unwrap();
+    let store = ConfigStore::open(root.path().to_path_buf());
+    let mut wallpaper = WallpaperConfig::new_for("100", "scene");
+    wallpaper.audio.response_enabled = true;
+    wallpaper.audio.volume = 0.8;
+    store
+        .save_app_config(&AppConfig {
+            monitors: vec![
+                MonitorCfg {
+                    selector: SerializedSelector::Primary,
+                    enabled: true,
+                    mode: "independent".to_string(),
+                    wallpaper: Some("100".to_string()),
+                    mirror_target: None,
+                },
+                MonitorCfg {
+                    selector: secondary_selector.clone(),
+                    enabled: true,
+                    mode: "mirror".to_string(),
+                    wallpaper: None,
+                    mirror_target: Some(SerializedSelector::Primary),
+                },
+            ],
+            monitor_settings: vec![MonitorSettingsCfg {
+                selector: secondary_selector,
+                scaling_mode: "fill".to_string(),
+                scaling_factor: 1.25,
+                target_fps: 30,
+                volume: 0.2,
+                muted: true,
+            }],
+            ..AppConfig::default()
+        })
+        .unwrap();
+    store.save_wallpaper(&wallpaper).unwrap();
+
+    let engine = FakeEngineFacade::default();
+    engine.set_snapshot_after_refresh(vec![primary, secondary]);
+    let bridge = BridgeBuilder::new(engine.clone())
+        .with_config_store(ConfigStore::open(root.path().to_path_buf()))
+        .build()
+        .expect("tokio runtime and config load for wallpaper bridge");
+
+    bridge.bootstrap().await.unwrap();
+    bridge
+        .inject_scene_wallpaper_config_for_test("100", "Scene")
+        .await;
+    engine.set_snapshot(vec![
+        active_display("primary", 1, 1, "100"),
+        active_display("secondary", 3, 2, "100"),
+    ]);
+
+    (bridge, engine, secondary_display_id)
 }
 
 async fn apply_primary_wallpaper(bridge: &WallpaperBridge, wallpaper_id: &str) {
@@ -1990,6 +2355,35 @@ fn identified_display(uuid: &str, display_id: u32) -> DisplaySnapshotEntry {
         window_active: true,
         assignment: None,
     }
+}
+
+fn active_display(
+    uuid: &str,
+    display_id: u32,
+    handle: u64,
+    wallpaper_id: &str,
+) -> DisplaySnapshotEntry {
+    let mut display = identified_display(uuid, display_id);
+    display.handle = Some(SceneHandle::new(handle));
+    display.assignment = Some(wallpaper_core::WallpaperAssignment::Direct(
+        wallpaper_core::project::SceneTemplate::builder(format!(
+            "/workshop/content/431960/{wallpaper_id}/project.json"
+        ))
+        .build()
+        .expect("test scene template should be valid"),
+    ));
+    display
+}
+
+fn latest_scene(engine: &FakeEngineFacade, display_id: u32) -> wallpaper_core::project::SceneDesc {
+    engine
+        .calls()
+        .last()
+        .expect("reconcile call")
+        .iter()
+        .find(|scene| scene.display.display_id == display_id)
+        .unwrap_or_else(|| panic!("missing scene for display {display_id}"))
+        .clone()
 }
 
 fn assert_latest_scene(engine: &FakeEngineFacade, display_id: u32, workshop_id: &str) {

@@ -96,6 +96,7 @@ pub struct BridgeLibrarySnapshot {
 }
 
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct BridgeDisplayConfigRow {
     pub display_id: String,
     pub title: String,
@@ -104,6 +105,8 @@ pub struct BridgeDisplayConfigRow {
     pub scaling_factor: f64,
     pub target_fps: u32,
     pub max_fps: u32,
+    pub muted: bool,
+    pub volume: f32,
     pub dirty: bool,
     pub can_restore_defaults: bool,
 }
@@ -150,6 +153,8 @@ pub struct BridgeMonitorInfoRow {
     pub title: String,
     pub wallpaper_id: String,
     pub wallpaper_title: String,
+    pub mirror_target_display_id: Option<String>,
+    pub mirror_target_title: Option<String>,
     pub scaling_mode: String,
     pub target_fps: String,
     pub audio_response: bool,
@@ -160,7 +165,7 @@ pub struct BridgeMonitorInformationSnapshot {
     pub rows: Vec<BridgeMonitorInfoRow>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct BridgeDisplaySettingsRow {
     pub display_id: String,
     pub title: String,
@@ -168,6 +173,12 @@ pub struct BridgeDisplaySettingsRow {
     pub mode: BridgeDisplayMode,
     pub mirror_targets: Vec<String>,
     pub selected_mirror_target: Option<String>,
+    pub scaling_mode: BridgeScalingMode,
+    pub scaling_factor: f64,
+    pub target_fps: u32,
+    pub max_fps: u32,
+    pub muted: bool,
+    pub volume: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
@@ -193,7 +204,7 @@ pub struct BridgeStorageStatus {
     pub logs: BridgeLogStatus,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct BridgeSettingsSnapshot {
     pub displays: Vec<BridgeDisplaySettingsRow>,
     pub launch_at_login_available: bool,
@@ -223,7 +234,7 @@ pub struct BridgeWallpaperMutationBundle {
     pub settings: BridgeSettingsSnapshot,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct BridgeDisplayMutationBundle {
     pub app: BridgeAppSnapshot,
     pub library: BridgeLibrarySnapshot,

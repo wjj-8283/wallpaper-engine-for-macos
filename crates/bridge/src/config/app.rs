@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
-use wallpaper_core::{DisplayIdentity, DisplaySelector};
+use wallpaper_core::{DisplayIdentity, DisplaySelector, project::ScalingMode};
 
 pub const SCHEMA_VERSION: u32 = 1;
+const DEFAULT_MONITOR_VOLUME: f32 = 1.0;
+const DEFAULT_MONITOR_FPS: u32 = 60;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default = "default_schema_version")]
     pub schema_version: u32,
@@ -13,6 +15,8 @@ pub struct AppConfig {
     pub ui: UiCfg,
     #[serde(default)]
     pub monitors: Vec<MonitorCfg>,
+    #[serde(default)]
+    pub monitor_settings: Vec<MonitorSettingsCfg>,
 }
 
 impl Default for AppConfig {
@@ -22,6 +26,7 @@ impl Default for AppConfig {
             general: GeneralCfg::default(),
             ui: UiCfg::default(),
             monitors: Vec::new(),
+            monitor_settings: Vec::new(),
         }
     }
 }
@@ -195,6 +200,47 @@ impl Default for MonitorCfg {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MonitorSettingsCfg {
+    #[serde(flatten, default)]
+    pub selector: SerializedSelector,
+    #[serde(default = "default_scaling_mode")]
+    pub scaling_mode: String,
+    #[serde(default = "default_scaling_factor")]
+    pub scaling_factor: f64,
+    #[serde(default = "default_target_fps")]
+    pub target_fps: u32,
+    #[serde(default = "default_monitor_volume")]
+    pub volume: f32,
+    #[serde(default)]
+    pub muted: bool,
+}
+
+impl Default for MonitorSettingsCfg {
+    fn default() -> Self {
+        Self {
+            selector: SerializedSelector::default(),
+            scaling_mode: default_scaling_mode(),
+            scaling_factor: default_scaling_factor(),
+            target_fps: default_target_fps(),
+            volume: default_monitor_volume(),
+            muted: false,
+        }
+    }
+}
+
+impl MonitorSettingsCfg {
+    #[must_use]
+    pub fn parse_scaling_mode(&self) -> ScalingMode {
+        match self.scaling_mode.to_ascii_lowercase().as_str() {
+            "none" => ScalingMode::None,
+            "stretch" => ScalingMode::Stretch,
+            "fill" => ScalingMode::Fill,
+            _ => ScalingMode::Fit,
+        }
+    }
+}
+
 #[allow(clippy::single_call_fn)]
 fn default_schema_version() -> u32 {
     SCHEMA_VERSION
@@ -207,6 +253,22 @@ fn default_true() -> bool {
 
 fn default_monitor_mode() -> String {
     "independent".to_string()
+}
+
+fn default_scaling_mode() -> String {
+    "fit".to_string()
+}
+
+fn default_scaling_factor() -> f64 {
+    1.0
+}
+
+fn default_target_fps() -> u32 {
+    DEFAULT_MONITOR_FPS
+}
+
+fn default_monitor_volume() -> f32 {
+    DEFAULT_MONITOR_VOLUME
 }
 
 fn default_selector_window() -> WindowGeom {

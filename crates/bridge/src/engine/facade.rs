@@ -1,15 +1,20 @@
+#[cfg(test)]
+use std::{sync::mpsc::Receiver, time::Duration};
 use std::{
     sync::{
         Arc,
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Sender},
     },
     thread,
-    time::Duration,
 };
 
+#[cfg(test)]
 use arc_swap::ArcSwap;
+#[cfg(test)]
 use crossbeam_queue::SegQueue;
 use futures_util::future::{BoxFuture, FutureExt};
+#[cfg(test)]
+use wallpaper_core::project::SceneTemplate;
 use wallpaper_core::{
     DisplaySelector, DisplaySnapshotEntry, EngineError, WallpaperAssignment, WallpaperEngine,
     media::audio::{
@@ -254,6 +259,7 @@ impl AudioResponseEngine for BridgeAudioResponseEngine {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Default)]
 pub struct FakeEngineFacade {
     calls: Arc<ArcSwap<Vec<Vec<SceneDesc>>>>,
@@ -275,24 +281,29 @@ pub struct FakeEngineFacade {
     reconcile_done: Arc<SegQueue<Sender<()>>>,
 }
 
+#[cfg(test)]
 pub struct ReconcileBlock {
     blocked_rx: Receiver<()>,
     release_tx: Sender<()>,
 }
 
+#[cfg(test)]
 pub struct ReconcileDone {
     done_rx: Receiver<()>,
 }
 
+#[cfg(test)]
 struct ReconcileBlockGate {
     blocked_tx: Sender<()>,
     release_rx: Receiver<()>,
 }
 
+#[cfg(test)]
 fn load_log<T: Clone>(log: &ArcSwap<Vec<T>>) -> Vec<T> {
     log.load_full().as_ref().clone()
 }
 
+#[cfg(test)]
 fn push_log<T: Clone>(log: &ArcSwap<Vec<T>>, value: T) {
     log.rcu(|current| {
         let mut next = current.as_ref().clone();
@@ -301,12 +312,14 @@ fn push_log<T: Clone>(log: &ArcSwap<Vec<T>>, value: T) {
     });
 }
 
+#[cfg(test)]
 fn complete_reconcile_waiters(waiters: &SegQueue<Sender<()>>) {
     while let Some(waiter) = waiters.pop() {
         let _ = waiter.send(());
     }
 }
 
+#[cfg(test)]
 impl ReconcileBlock {
     #[must_use]
     pub fn wait_until_blocked(&self, timeout: Duration) -> bool {
@@ -318,6 +331,7 @@ impl ReconcileBlock {
     }
 }
 
+#[cfg(test)]
 impl ReconcileDone {
     #[must_use]
     pub fn wait(self, timeout: Duration) -> bool {
@@ -325,6 +339,7 @@ impl ReconcileDone {
     }
 }
 
+#[cfg(test)]
 impl FakeEngineFacade {
     #[must_use]
     pub fn calls(&self) -> Vec<Vec<SceneDesc>> {
@@ -432,8 +447,44 @@ impl FakeEngineFacade {
 
         ReconcileDone { done_rx }
     }
+
+    fn update_direct_assignment(&self, handle: SceneHandle, update: impl Fn(&mut SceneTemplate)) {
+        self.snapshot.rcu(|current| {
+            let mut next = current.as_ref().clone();
+            if let Some(WallpaperAssignment::Direct(template)) = next
+                .iter_mut()
+                .find(|entry| entry.handle == Some(handle))
+                .and_then(|entry| entry.assignment.as_mut())
+            {
+                update(template);
+            }
+            next
+        });
+    }
+
+    fn update_direct_assignment_after_refresh(
+        &self,
+        handle: SceneHandle,
+        update: impl Fn(&mut SceneTemplate),
+    ) {
+        self.snapshot_after_refresh.rcu(|current| {
+            let Some(current) = current.as_ref() else {
+                return None;
+            };
+            let mut next = current.clone();
+            if let Some(WallpaperAssignment::Direct(template)) = next
+                .iter_mut()
+                .find(|entry| entry.handle == Some(handle))
+                .and_then(|entry| entry.assignment.as_mut())
+            {
+                update(template);
+            }
+            Some(next)
+        });
+    }
 }
 
+#[cfg(test)]
 impl EngineFacade for FakeEngineFacade {
     fn reconcile_scenes(&self, scenes: Vec<SceneDesc>) -> EngineFuture<Vec<SceneResult>> {
         let fake = self.clone();
@@ -497,6 +548,12 @@ impl EngineFacade for FakeEngineFacade {
         let fake = self.clone();
         async move {
             push_log(&fake.audio_volume_calls, (handle, f32::from(volume)));
+            fake.update_direct_assignment(handle, |template| {
+                template.audio_volume = volume;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.audio_volume = volume;
+            });
             Ok(())
         }
         .boxed()
@@ -506,6 +563,12 @@ impl EngineFacade for FakeEngineFacade {
         let fake = self.clone();
         async move {
             push_log(&fake.audio_muted_calls, (handle, muted));
+            fake.update_direct_assignment(handle, |template| {
+                template.audio_muted = muted;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.audio_muted = muted;
+            });
             Ok(())
         }
         .boxed()
@@ -515,6 +578,12 @@ impl EngineFacade for FakeEngineFacade {
         let fake = self.clone();
         async move {
             push_log(&fake.audio_response_calls, (handle, enabled));
+            fake.update_direct_assignment(handle, |template| {
+                template.audio_response_enabled = enabled;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.audio_response_enabled = enabled;
+            });
             Ok(())
         }
         .boxed()
@@ -529,6 +598,12 @@ impl EngineFacade for FakeEngineFacade {
             }
             push_log(&fake.audio_capture_calls, (handle, enabled));
             push_log(&fake.audio_response_calls, (handle, enabled));
+            fake.update_direct_assignment(handle, |template| {
+                template.audio_response_enabled = enabled;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.audio_response_enabled = enabled;
+            });
             Ok(())
         }
         .boxed()
@@ -538,6 +613,12 @@ impl EngineFacade for FakeEngineFacade {
         let fake = self.clone();
         async move {
             push_log(&fake.scaling_mode_calls, (handle, mode));
+            fake.update_direct_assignment(handle, |template| {
+                template.scaling_mode = mode;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.scaling_mode = mode;
+            });
             Ok(())
         }
         .boxed()
@@ -547,6 +628,12 @@ impl EngineFacade for FakeEngineFacade {
         let fake = self.clone();
         async move {
             push_log(&fake.scaling_factor_calls, (handle, factor));
+            fake.update_direct_assignment(handle, |template| {
+                template.scaling_factor = factor;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.scaling_factor = factor;
+            });
             Ok(())
         }
         .boxed()
@@ -556,6 +643,12 @@ impl EngineFacade for FakeEngineFacade {
         let fake = self.clone();
         async move {
             push_log(&fake.fps_calls, (handle, fps));
+            fake.update_direct_assignment(handle, |template| {
+                template.fps = fps;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.fps = fps;
+            });
             Ok(())
         }
         .boxed()

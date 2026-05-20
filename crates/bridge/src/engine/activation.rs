@@ -11,7 +11,7 @@ use wallpaper_core::{
 
 use crate::{
     api::{BridgeError, BridgeErrorKind},
-    config::{AppConfig, MonitorCfg, WallpaperConfig},
+    config::{AppConfig, MonitorCfg, MonitorSettingsCfg, WallpaperConfig},
     display::{DisplayDescExt, DisplayIdentityExt, DisplaySelectorExt},
     paths::BridgePaths,
     project::{OverrideMapExt, PropertyValue},
@@ -56,12 +56,7 @@ impl ActivationInputs<'_> {
                 continue;
             }
 
-            let Some(display) = monitor
-                .selector
-                .to_selector()
-                .resolve_display(self.displays)
-                .map(|entry| entry.desc.clone())
-            else {
+            let Some(display) = monitor.resolve_display(self.displays) else {
                 continue;
             };
             if used_displays
@@ -71,20 +66,97 @@ impl ActivationInputs<'_> {
                 continue;
             }
 
-            let scene = SceneDescBuilder::build_from_wallpaper_config(
-                display.clone(),
-                wallpaper_id,
-                wallpaper,
-                monitor,
-                self.paused,
-                self.paths,
-                self.force_shader_refresh,
-            )?;
+            let scene =
+                self.scene_for_monitor(display.clone(), wallpaper_id, wallpaper, monitor)?;
+            used_displays.push(display);
+            scenes.push(scene);
+        }
+
+        for monitor in self
+            .app_config
+            .monitors
+            .iter()
+            .filter(|monitor| monitor.enabled && monitor.mode.eq_ignore_ascii_case("mirror"))
+        {
+            let Some(display) = monitor.resolve_display(self.displays) else {
+                continue;
+            };
+            if used_displays
+                .iter()
+                .any(|used| used.same_physical_display(&display))
+            {
+                continue;
+            }
+            let Some(target) = monitor.mirror_target.as_ref() else {
+                continue;
+            };
+            let Some(source_display_id) = target
+                .to_selector()
+                .resolve_display(self.displays)
+                .map(|entry| entry.desc.display_id)
+            else {
+                continue;
+            };
+            let Some(source_scene) = scenes
+                .iter()
+                .find(|scene| scene.display.display_id == source_display_id)
+                .cloned()
+            else {
+                continue;
+            };
+            let settings = self
+                .app_config
+                .monitor_settings
+                .iter()
+                .find(|settings| settings.selector == monitor.selector)
+                .cloned()
+                .unwrap_or_else(|| MonitorSettingsCfg {
+                    selector: monitor.selector.clone(),
+                    ..MonitorSettingsCfg::default()
+                });
+            let audio_volume =
+                AudioVolume::try_from(settings.volume).map_err(|error| BridgeError::Error {
+                    kind: BridgeErrorKind::Engine,
+                    message: EngineError::InvalidInput(error.to_string()).to_string(),
+                })?;
+            let mut scene = source_scene;
+            scene.display = display.clone();
+            scene.scaling_mode = settings.parse_scaling_mode();
+            scene.scaling_factor = settings.scaling_factor;
+            scene.fps = scene
+                .display
+                .refresh_rate_hz
+                .max(1)
+                .min(settings.target_fps.max(1));
+            scene.audio_volume = audio_volume;
+            scene.audio_muted = settings.muted;
+            scene.validate().map_err(|error| BridgeError::Error {
+                kind: BridgeErrorKind::Engine,
+                message: error.to_string(),
+            })?;
             used_displays.push(display);
             scenes.push(scene);
         }
 
         Ok(scenes)
+    }
+
+    fn scene_for_monitor(
+        &self,
+        display: DisplayDesc,
+        wallpaper_id: &str,
+        wallpaper: &WallpaperConfig,
+        monitor: &MonitorCfg,
+    ) -> Result<SceneDesc, BridgeError> {
+        SceneDescBuilder::build_from_wallpaper_config(
+            display,
+            wallpaper_id,
+            wallpaper,
+            monitor,
+            self.paused,
+            self.paths,
+            self.force_shader_refresh,
+        )
     }
 }
 
@@ -124,6 +196,19 @@ impl WallpaperAssignmentExt for WallpaperAssignment {
         }
 
         assignments
+    }
+}
+
+trait MonitorCfgActivationExt {
+    fn resolve_display(&self, displays: &[DisplaySnapshotEntry]) -> Option<DisplayDesc>;
+}
+
+impl MonitorCfgActivationExt for MonitorCfg {
+    fn resolve_display(&self, displays: &[DisplaySnapshotEntry]) -> Option<DisplayDesc> {
+        self.selector
+            .to_selector()
+            .resolve_display(displays)
+            .map(|entry| entry.desc.clone())
     }
 }
 

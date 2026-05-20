@@ -3,10 +3,17 @@ use std::collections::BTreeMap;
 use wallpaper_core::{DisplayDesc, DisplayIdentity, DisplaySelector, DisplaySnapshotEntry};
 
 use crate::{
-    config::{AppConfig, MonitorCfg, SerializedSelector, WallpaperConfig},
+    config::{AppConfig, MonitorCfg, MonitorSettingsCfg, SerializedSelector, WallpaperConfig},
     engine::ActivationInputs,
     paths::BridgePaths,
 };
+
+fn assert_f32_close(actual: f32, expected: f32) {
+    assert!(
+        (actual - expected).abs() <= f32::EPSILON,
+        "expected {actual} to be within f32::EPSILON of {expected}"
+    );
+}
 
 #[test]
 fn activation_plan_marks_scenes_paused_when_global_playback_is_paused() {
@@ -124,6 +131,82 @@ fn assert_scene(scenes: &[wallpaper_core::project::SceneDesc], display_id: u32, 
     );
 }
 
+#[test]
+fn mirror_scene_follows_source_wallpaper_with_monitor_overrides() {
+    let mut wallpapers = BTreeMap::new();
+    let mut wallpaper = WallpaperConfig::new_for("100", "scene");
+    wallpaper.audio.response_enabled = true;
+    wallpaper.audio.volume = 0.4;
+    wallpaper.audio.muted = false;
+    wallpapers.insert("100".to_string(), wallpaper);
+    let app_config = AppConfig {
+        monitors: vec![
+            MonitorCfg {
+                selector: SerializedSelector::Primary,
+                enabled: true,
+                wallpaper: Some("100".to_string()),
+                ..MonitorCfg::default()
+            },
+            MonitorCfg {
+                selector: SerializedSelector::LiveDisplayId { display_id: 2 },
+                enabled: true,
+                mode: "mirror".to_string(),
+                mirror_target: Some(SerializedSelector::Primary),
+                ..MonitorCfg::default()
+            },
+        ],
+        monitor_settings: vec![MonitorSettingsCfg {
+            selector: SerializedSelector::LiveDisplayId { display_id: 2 },
+            scaling_mode: "fill".to_string(),
+            scaling_factor: 1.25,
+            target_fps: 30,
+            volume: 0.2,
+            muted: true,
+        }],
+        ..AppConfig::default()
+    };
+    let displays = vec![display_snapshot(1), display_snapshot(2)];
+    let paths = BridgePaths::for_home("/tmp/test-home");
+
+    let scenes = ActivationInputs {
+        app_config: &app_config,
+        wallpapers: &wallpapers,
+        displays: &displays,
+        paused: false,
+        paths: &paths,
+        force_shader_refresh: false,
+    }
+    .build()
+    .unwrap();
+
+    let primary = scenes
+        .iter()
+        .find(|scene| scene.display.display_id == 1)
+        .expect("primary scene should be active");
+    let mirror = scenes
+        .iter()
+        .find(|scene| scene.display.display_id == 2)
+        .expect("mirror scene should be active");
+    assert_eq!(scenes.len(), 2);
+    assert!(primary.audio_response_enabled);
+    assert!(mirror.audio_response_enabled);
+    assert_f32_close(f32::from(primary.audio_volume), 0.4);
+    assert_f32_close(f32::from(mirror.audio_volume), 0.2);
+    assert!(!primary.audio_muted);
+    assert!(mirror.audio_muted);
+    assert_eq!(
+        mirror.scaling_mode,
+        wallpaper_core::project::ScalingMode::Fill
+    );
+    assert!(
+        (mirror.scaling_factor - 1.25).abs() <= f64::EPSILON,
+        "expected {} to be within f64::EPSILON of 1.25",
+        mirror.scaling_factor
+    );
+    assert_eq!(mirror.fps, 30);
+    assert_scene(&scenes, 2, "100");
+}
+
 fn identified_display(uuid: &str, display_id: u32) -> DisplaySnapshotEntry {
     let identity = DisplayIdentity {
         uuid: Some(uuid.to_string()),
@@ -136,6 +219,24 @@ fn identified_display(uuid: &str, display_id: u32) -> DisplaySnapshotEntry {
     DisplaySnapshotEntry {
         identity: identity.clone(),
         desc: DisplayDesc::with_identity(display_id, identity, 0, 0, 1920, 1080, 2.0),
+        handle: None,
+        window_active: true,
+        assignment: None,
+    }
+}
+
+fn display_snapshot(display_id: u32) -> DisplaySnapshotEntry {
+    DisplaySnapshotEntry {
+        identity: DisplayIdentity::default(),
+        desc: DisplayDesc::with_identity(
+            display_id,
+            DisplayIdentity::default(),
+            0,
+            0,
+            1920,
+            1080,
+            2.0,
+        ),
         handle: None,
         window_active: true,
         assignment: None,

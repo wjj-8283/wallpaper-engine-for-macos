@@ -28,20 +28,21 @@ use crate::{
             RefreshDisplays, RefreshLibrary, ReplaceLibraryForTest, ReplaceWallpaperConfigForTest,
             RestorePropertyDefault, SelectWallpaper, SetAudioResponseEnabled,
             SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode, SetFilter,
-            SetGlobalPlayback, SetLaunchAtLogin, SetMirrorTarget, SetMuted, SetScalingFactor,
-            SetScalingMode, SetTargetFps, SetVolume, Shutdown,
+            SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
+            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
+            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, Shutdown,
         },
         state::BridgeActorState,
     },
     api::{
         BridgeAppSnapshot, BridgeDisplayMode, BridgeDisplayMutationBundle,
         BridgeDisplaySettingsRow, BridgeError, BridgeLibraryScanStatus, BridgeLibrarySnapshot,
-        BridgePropertyValue, BridgeSnapshotBundle, BridgeWallpaperEntry, BridgeWallpaperKind,
-        BridgeWallpaperMutationBundle,
+        BridgePropertyValue, BridgeScalingMode, BridgeSnapshotBundle, BridgeWallpaperEntry,
+        BridgeWallpaperKind, BridgeWallpaperMutationBundle,
     },
     config::{AppConfig, ConfigStore, SerializedSelector, WallpaperConfig},
     display::{DisplaySelectorExt, DisplaySnapshotExt},
-    engine::{ActivationInputs, EngineFacade, WallpaperAssignmentExt},
+    engine::{ActivationInputs, EngineFacade},
     library::scan,
     login::LaunchAtLoginController,
     paths::BridgePaths,
@@ -348,16 +349,21 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
         }
     }
 
-    fn wallpaper_handles(&self, wallpaper_id: &str) -> Vec<SceneHandle> {
+    fn wallpaper_handles(&self, wallpaper_id: &str, include_mirrors: bool) -> Vec<SceneHandle> {
         let displays = self.engine.display_snapshot();
         let mut handles = Vec::new();
         let mut used_display_ids = Vec::new();
 
-        for monitor in
-            self.state.app_config.monitors.iter().filter(|monitor| {
-                monitor.enabled && monitor.wallpaper.as_deref() == Some(wallpaper_id)
-            })
-        {
+        for monitor in self.state.app_config.monitors.iter().filter(|monitor| {
+            monitor.enabled
+                && (monitor.wallpaper.as_deref() == Some(wallpaper_id)
+                    || include_mirrors
+                        && monitor.mode.eq_ignore_ascii_case(MIRROR_DISPLAY_MODE)
+                        && monitor
+                            .mirror_target
+                            .as_ref()
+                            .is_some_and(|target| self.target_has_wallpaper(target, wallpaper_id)))
+        }) {
             let Some(snapshot) = monitor.selector.to_selector().resolve_display(&displays) else {
                 continue;
             };
@@ -373,6 +379,14 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
         }
 
         handles
+    }
+
+    fn target_has_wallpaper(&self, selector: &SerializedSelector, wallpaper_id: &str) -> bool {
+        self.state.app_config.monitors.iter().any(|monitor| {
+            monitor.enabled
+                && monitor.wallpaper.as_deref() == Some(wallpaper_id)
+                && monitor.selector == *selector
+        })
     }
 
     fn display_handle(
@@ -393,6 +407,32 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
             })
             .and_then(|monitor| monitor.selector.to_selector().resolve_display(&displays))
             .and_then(|snapshot| snapshot.handle)
+    }
+
+    fn mirror_display_handle(
+        &self,
+        selector: &SerializedSelector,
+        displays: &[DisplaySnapshotEntry],
+    ) -> Option<SceneHandle> {
+        self.state
+            .app_config
+            .monitors
+            .iter()
+            .find(|monitor| {
+                monitor.enabled
+                    && monitor.mode.eq_ignore_ascii_case(MIRROR_DISPLAY_MODE)
+                    && &monitor.selector == selector
+            })
+            .and_then(|monitor| monitor.selector.to_selector().resolve_display(displays))
+            .and_then(|snapshot| snapshot.handle)
+    }
+
+    fn commit_app_config(&mut self, app_config: AppConfig) -> Result<(), BridgeError> {
+        if let Some(store) = &self.config_store {
+            store.save_app_config(&app_config)?;
+        }
+        self.state.app_config = app_config;
+        Ok(())
     }
 
     fn save_wallpaper(
@@ -909,6 +949,48 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
             .parse::<u32>()
             .map_err(|_| BridgeError::invalid_input(format!("invalid display id {display_id}")))
     }
+
+    fn monitor_settings_mut(
+        app_config: &mut AppConfig,
+        selector: SerializedSelector,
+    ) -> &mut crate::config::MonitorSettingsCfg {
+        if let Some(index) = app_config
+            .monitor_settings
+            .iter()
+            .position(|settings| settings.selector == selector)
+        {
+            return &mut app_config.monitor_settings[index];
+        }
+
+        app_config
+            .monitor_settings
+            .push(crate::config::MonitorSettingsCfg {
+                selector,
+                ..crate::config::MonitorSettingsCfg::default()
+            });
+        app_config
+            .monitor_settings
+            .last_mut()
+            .expect("settings entry was just inserted")
+    }
+
+    fn require_mirror_monitor<'a>(
+        app_config: &'a AppConfig,
+        selector: &SerializedSelector,
+    ) -> Result<&'a crate::config::MonitorCfg, BridgeError> {
+        let monitor = app_config
+            .monitors
+            .iter()
+            .find(|monitor| &monitor.selector == selector)
+            .ok_or_else(|| BridgeError::invalid_input("unknown mirror display"))?;
+        if monitor.enabled && monitor.mode.eq_ignore_ascii_case(MIRROR_DISPLAY_MODE) {
+            Ok(monitor)
+        } else {
+            Err(BridgeError::invalid_input(
+                "display is not configured for mirror mode",
+            ))
+        }
+    }
 }
 
 async fn reconcile_with<E: EngineFacade>(
@@ -967,20 +1049,6 @@ async fn reconcile_with<E: EngineFacade>(
             .map_err(|error| BridgeError::engine(error.to_string()))?;
     }
 
-    // Apply mirror assignments
-    let displays = engine.display_snapshot();
-    for (selector, assignment) in
-        WallpaperAssignment::build_mirror_assignments(&app_config, &displays)
-    {
-        engine
-            .create_window_for_display(selector.clone())
-            .await
-            .map_err(|error| BridgeError::engine(error.to_string()))?;
-        engine
-            .set_wallpaper_for_display(selector, assignment)
-            .await
-            .map_err(|error| BridgeError::engine(error.to_string()))?;
-    }
     Ok(scenes)
 }
 
@@ -1252,6 +1320,12 @@ impl<E: EngineFacade + Clone> Message<InjectDisplayForTest> for BridgeActor<E> {
                 mode: BridgeDisplayMode::Standalone,
                 mirror_targets,
                 selected_mirror_target: None,
+                scaling_mode: BridgeScalingMode::Match,
+                scaling_factor: 1.0,
+                target_fps: 60,
+                max_fps: 60,
+                muted: false,
+                volume: 1.0,
             },
         );
         let ids = self
@@ -1559,6 +1633,218 @@ impl<E: EngineFacade + Clone> Message<SetMirrorTarget> for BridgeActor<E> {
     }
 }
 
+impl<E: EngineFacade + Clone> Message<SetMirrorScalingMode> for BridgeActor<E> {
+    type Reply = DelegatedReply<messages::SetMirrorScalingModeReply>;
+
+    async fn handle(
+        &mut self,
+        msg: SetMirrorScalingMode,
+        ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        macro_rules! reply_try {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => return ctx.reply(Err(error)),
+                }
+            };
+        }
+
+        let displays = self.engine.display_snapshot();
+        let selector = reply_try!(self.selector_for(&msg.display_id, &displays));
+        let handle = self.mirror_display_handle(&selector, &displays);
+        let mut app_config = self.normalized_config(&displays);
+        reply_try!(Self::require_mirror_monitor(&app_config, &selector));
+        let scaling_mode = ScalingMode::from(msg.mode);
+        Self::monitor_settings_mut(&mut app_config, selector).scaling_mode =
+            scaling_mode.to_string();
+        reply_try!(self.commit_app_config(app_config));
+        if let Some(handle) = handle {
+            reply_try!(
+                self.engine
+                    .set_scaling_mode(handle, scaling_mode)
+                    .await
+                    .map_err(|error| BridgeError::engine(error.to_string()))
+            );
+        }
+        self.bump_generation();
+        ctx.reply(Ok(self.display_bundle()))
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetMirrorScalingFactor> for BridgeActor<E> {
+    type Reply = DelegatedReply<messages::SetMirrorScalingFactorReply>;
+
+    async fn handle(
+        &mut self,
+        msg: SetMirrorScalingFactor,
+        ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        macro_rules! reply_try {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => return ctx.reply(Err(error)),
+                }
+            };
+        }
+
+        if !msg.factor.is_finite() || msg.factor <= 0.0 {
+            return ctx.reply(Err(BridgeError::invalid_input(
+                "scaling factor must be greater than 0",
+            )));
+        }
+        let displays = self.engine.display_snapshot();
+        let selector = reply_try!(self.selector_for(&msg.display_id, &displays));
+        let handle = self.mirror_display_handle(&selector, &displays);
+        let mut app_config = self.normalized_config(&displays);
+        reply_try!(Self::require_mirror_monitor(&app_config, &selector));
+        Self::monitor_settings_mut(&mut app_config, selector).scaling_factor = msg.factor;
+        reply_try!(self.commit_app_config(app_config));
+        if let Some(handle) = handle {
+            reply_try!(
+                self.engine
+                    .set_scaling_factor(handle, msg.factor)
+                    .await
+                    .map_err(|error| BridgeError::engine(error.to_string()))
+            );
+        }
+        self.bump_generation();
+        ctx.reply(Ok(self.display_bundle()))
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetMirrorTargetFps> for BridgeActor<E> {
+    type Reply = DelegatedReply<messages::SetMirrorTargetFpsReply>;
+
+    async fn handle(
+        &mut self,
+        msg: SetMirrorTargetFps,
+        ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        macro_rules! reply_try {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => return ctx.reply(Err(error)),
+                }
+            };
+        }
+
+        let displays = self.engine.display_snapshot();
+        let selector = reply_try!(self.selector_for(&msg.display_id, &displays));
+        let source_display_id = reply_try!(self.source_display_id(&selector, &displays));
+        let max_fps = reply_try!(
+            displays
+                .iter()
+                .find(|display| display.desc.display_id == source_display_id)
+                .map(|display| display.desc.refresh_rate_hz.max(1))
+                .ok_or_else(|| {
+                    BridgeError::invalid_input(format!("unknown display id {source_display_id}"))
+                })
+        );
+        let handle = self.mirror_display_handle(&selector, &displays);
+        let mut app_config = self.normalized_config(&displays);
+        reply_try!(Self::require_mirror_monitor(&app_config, &selector));
+        let target_fps = msg.fps.max(1).min(max_fps);
+        Self::monitor_settings_mut(&mut app_config, selector).target_fps = target_fps;
+        reply_try!(self.commit_app_config(app_config));
+        if let Some(handle) = handle {
+            reply_try!(
+                self.engine
+                    .set_fps(handle, target_fps)
+                    .await
+                    .map_err(|error| BridgeError::engine(error.to_string()))
+            );
+        }
+        self.bump_generation();
+        ctx.reply(Ok(self.display_bundle()))
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetMirrorVolume> for BridgeActor<E> {
+    type Reply = DelegatedReply<messages::SetMirrorVolumeReply>;
+
+    async fn handle(
+        &mut self,
+        msg: SetMirrorVolume,
+        ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        macro_rules! reply_try {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => return ctx.reply(Err(error)),
+                }
+            };
+        }
+
+        if !(0.0..=1.0).contains(&msg.volume) {
+            return ctx.reply(Err(BridgeError::invalid_input(
+                "mirror volume must be between 0 and 1",
+            )));
+        }
+        let volume = reply_try!(
+            AudioVolume::try_from(msg.volume)
+                .map_err(|error| BridgeError::invalid_input(error.to_string()))
+        );
+        let displays = self.engine.display_snapshot();
+        let selector = reply_try!(self.selector_for(&msg.display_id, &displays));
+        let handle = self.mirror_display_handle(&selector, &displays);
+        let mut app_config = self.normalized_config(&displays);
+        reply_try!(Self::require_mirror_monitor(&app_config, &selector));
+        Self::monitor_settings_mut(&mut app_config, selector).volume = msg.volume;
+        reply_try!(self.commit_app_config(app_config));
+        if let Some(handle) = handle {
+            reply_try!(
+                self.engine
+                    .set_audio_volume(handle, volume)
+                    .await
+                    .map_err(|error| BridgeError::engine(error.to_string()))
+            );
+        }
+        self.bump_generation();
+        ctx.reply(Ok(self.display_bundle()))
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetMirrorMuted> for BridgeActor<E> {
+    type Reply = DelegatedReply<messages::SetMirrorMutedReply>;
+
+    async fn handle(
+        &mut self,
+        msg: SetMirrorMuted,
+        ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        macro_rules! reply_try {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => return ctx.reply(Err(error)),
+                }
+            };
+        }
+
+        let displays = self.engine.display_snapshot();
+        let selector = reply_try!(self.selector_for(&msg.display_id, &displays));
+        let handle = self.mirror_display_handle(&selector, &displays);
+        let mut app_config = self.normalized_config(&displays);
+        reply_try!(Self::require_mirror_monitor(&app_config, &selector));
+        Self::monitor_settings_mut(&mut app_config, selector).muted = msg.muted;
+        reply_try!(self.commit_app_config(app_config));
+        if let Some(handle) = handle {
+            reply_try!(
+                self.engine
+                    .set_audio_muted(handle, msg.muted)
+                    .await
+                    .map_err(|error| BridgeError::engine(error.to_string()))
+            );
+        }
+        self.bump_generation();
+        ctx.reply(Ok(self.display_bundle()))
+    }
+}
+
 impl<E: EngineFacade + Clone> Message<SetLaunchAtLogin> for BridgeActor<E> {
     type Reply = messages::DisplayMutationReply;
 
@@ -1700,7 +1986,7 @@ impl<E: EngineFacade + Clone> Message<SetVolume> for BridgeActor<E> {
             .wallpaper_draft_mut(&msg.wallpaper_id)?
             .set_volume_immediate(msg.volume)?;
         self.save_wallpaper(msg.wallpaper_id.clone(), wallpaper_config)?;
-        for handle in self.wallpaper_handles(&msg.wallpaper_id) {
+        for handle in self.wallpaper_handles(&msg.wallpaper_id, false) {
             self.engine
                 .set_audio_volume(handle, volume)
                 .await
@@ -1724,7 +2010,7 @@ impl<E: EngineFacade + Clone> Message<SetMuted> for BridgeActor<E> {
             .wallpaper_draft_mut(&msg.wallpaper_id)?
             .set_muted_immediate(msg.muted);
         self.save_wallpaper(msg.wallpaper_id.clone(), wallpaper_config)?;
-        for handle in self.wallpaper_handles(&msg.wallpaper_id) {
+        for handle in self.wallpaper_handles(&msg.wallpaper_id, false) {
             self.engine
                 .set_audio_muted(handle, msg.muted)
                 .await
@@ -1748,7 +2034,7 @@ impl<E: EngineFacade + Clone> Message<SetAudioResponseEnabled> for BridgeActor<E
             .wallpaper_draft_mut(&msg.wallpaper_id)?
             .set_audio_response_enabled_immediate(msg.enabled);
         self.save_wallpaper(msg.wallpaper_id.clone(), wallpaper_config)?;
-        for handle in self.wallpaper_handles(&msg.wallpaper_id) {
+        for handle in self.wallpaper_handles(&msg.wallpaper_id, true) {
             let engine = self.engine.clone();
             let enabled = msg.enabled;
             tokio::spawn(async move {

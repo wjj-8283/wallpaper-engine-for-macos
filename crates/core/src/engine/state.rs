@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use crate::{
-    DisplaySnapshotEntry, EngineError,
+    DisplaySnapshotEntry, EngineError, WallpaperAssignment,
     display::state::{DisplayKey, DisplayRecord, DisplayStateModel},
     engine::{
         runtime::{SceneRuntime, SceneRuntimeState},
         snapshot::EngineSnapshot,
     },
-    project::SceneHandle,
+    project::{SceneHandle, SceneTemplate},
 };
 
 pub struct EngineState {
@@ -36,6 +36,12 @@ impl DisplayRuntimeRecord {
 
     pub fn scene_desc(&self) -> Result<Option<crate::project::SceneDesc>, EngineError> {
         self.model.scene_desc()
+    }
+
+    fn sync_direct_assignment_from_desc(&mut self, desc: &crate::project::SceneDesc) {
+        if let Some(WallpaperAssignment::Direct(template)) = self.model.assignment.as_mut() {
+            *template = SceneTemplate::from_scene_desc(desc);
+        }
     }
 }
 
@@ -245,6 +251,13 @@ impl EngineState {
         self.display_records[index].handle = Some(handle);
         self.display_records[index].last_runtime_state = Some(runtime_state);
         self.display_records[index].model.runtime_open = true;
+        let runtime_desc = self.display_records[index]
+            .runtime
+            .as_ref()
+            .map(|runtime| runtime.desc.clone());
+        if let Some(runtime_desc) = runtime_desc {
+            self.display_records[index].sync_direct_assignment_from_desc(&runtime_desc);
+        }
         Ok(())
     }
 
@@ -286,8 +299,8 @@ mod tests {
     use crate::{
         DisplayDesc, DisplayIdentity, WallpaperAssignment,
         display::state::{DisplayKey, DisplayRecord, DisplayStateModel},
-        engine::runtime::SceneRuntimeState,
-        project::{SceneDesc, SceneTemplate},
+        engine::{runtime::SceneRuntimeState, state::DisplayRuntimeRecord},
+        project::{ScalingMode, SceneDesc, SceneTemplate},
     };
 
     fn identity(label: &str) -> DisplayIdentity {
@@ -424,5 +437,42 @@ mod tests {
             .expect("old secondary identity record should remain");
         assert_eq!(old_secondary_identity.handle, None);
         assert!(!old_secondary_identity.model.runtime_open);
+    }
+
+    #[test]
+    fn runtime_record_syncs_direct_assignment_from_live_descriptor() {
+        let original = SceneDesc::new(
+            DisplayDesc::new(1, 0, 0, 1920, 1080, 1.0),
+            "/tmp/project.json",
+            "/tmp/assets",
+            60,
+            false,
+        );
+        let mut updated = original.clone();
+        updated.scaling_mode = ScalingMode::Stretch;
+        let mut record = DisplayRuntimeRecord {
+            model: DisplayRecord {
+                key: DisplayKey::Primary,
+                live_display: Some(original.display.clone()),
+                assignment: Some(WallpaperAssignment::Direct(SceneTemplate::from_scene_desc(
+                    &original,
+                ))),
+                window_active: true,
+                runtime_open: true,
+                primary_inheritance_consumed: false,
+            },
+            handle: None,
+            runtime: None,
+            last_runtime_state: None,
+        };
+
+        record.sync_direct_assignment_from_desc(&updated);
+
+        assert_eq!(
+            record.model.assignment,
+            Some(WallpaperAssignment::Direct(SceneTemplate::from_scene_desc(
+                &updated
+            )))
+        );
     }
 }

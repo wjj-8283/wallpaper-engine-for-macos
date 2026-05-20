@@ -148,6 +148,31 @@ final class BridgeStore {
         apply(bundle)
     }
 
+    func setMirrorScalingModeAsync(displayId: String, mode: BridgeScalingMode) async throws {
+        let bundle = try await bridge.setMirrorScalingMode(displayId: displayId, mode: mode)
+        apply(bundle)
+    }
+
+    func setMirrorScalingFactorAsync(displayId: String, factor: Double) async throws {
+        let bundle = try await bridge.setMirrorScalingFactor(displayId: displayId, factor: factor)
+        apply(bundle)
+    }
+
+    func setMirrorTargetFpsAsync(displayId: String, fps: UInt32) async throws {
+        let bundle = try await bridge.setMirrorTargetFps(displayId: displayId, fps: fps)
+        apply(bundle)
+    }
+
+    func setMirrorVolumeAsync(displayId: String, volume: Float) async throws {
+        let bundle = try await bridge.setMirrorVolume(displayId: displayId, volume: volume)
+        apply(bundle)
+    }
+
+    func setMirrorMutedAsync(displayId: String, muted: Bool) async throws {
+        let bundle = try await bridge.setMirrorMuted(displayId: displayId, muted: muted)
+        apply(bundle)
+    }
+
     func setLaunchAtLoginAsync(enabled: Bool) async throws {
         let bundle = try await bridge.setLaunchAtLogin(enabled: enabled)
         apply(bundle)

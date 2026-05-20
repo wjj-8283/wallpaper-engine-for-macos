@@ -62,6 +62,8 @@ private struct DisplayConfigurationRow: View {
     @State private var scalingFactorDraft: String
     @State private var expanded: Bool
     @State private var targetFps: Double
+    @State private var muted: Bool
+    @State private var volume: Double
     @State private var bridgeActionInProgress = false
     @FocusState private var scalingFactorFocused: Bool
 
@@ -90,6 +92,8 @@ private struct DisplayConfigurationRow: View {
         _scalingFactorDraft = State(initialValue: Self.formattedScalingFactor(row.scalingFactor))
         _expanded = State(initialValue: !collapsible)
         _targetFps = State(initialValue: Double(Self.clampedTargetFps(row)))
+        _muted = State(initialValue: row.muted)
+        _volume = State(initialValue: Double(row.volume))
     }
 
     var body: some View {
@@ -198,7 +202,7 @@ private struct DisplayConfigurationRow: View {
                     Spacer()
                     EditableNumberField(
                         value: UInt32(targetFps.rounded()),
-                        range: 0...row.maxFps
+                        range: 1...row.maxFps
                     ) { editedValue in
                         setTargetFps(editedValue)
                     }
@@ -210,7 +214,7 @@ private struct DisplayConfigurationRow: View {
                     } set: { value in
                         targetFps = value
                     },
-                    in: 0...Double(row.maxFps),
+                    in: 1...Double(row.maxFps),
                     step: 1,
                     onEditingChanged: { editing in
                         if !editing {
@@ -219,6 +223,37 @@ private struct DisplayConfigurationRow: View {
                     }
                 )
                 .disabled(!enabled || bridgeActionInProgress)
+            }
+            .disabled(!enabled || bridgeActionInProgress)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Volume")
+
+                HStack {
+                    Button {
+                        setMuted(!muted)
+                    } label: {
+                        Label(muted ? "Unmute" : "Mute", systemImage: muted ? "speaker.slash" : "speaker.wave.2")
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(!enabled || bridgeActionInProgress)
+
+                    Slider(
+                        value: Binding {
+                            volume
+                        } set: { value in
+                            volume = value
+                        },
+                        in: 0...1,
+                        onEditingChanged: { editing in
+                            if !editing {
+                                setVolume(Float(volume))
+                            }
+                        }
+                    )
+                    .disabled(muted || !enabled || bridgeActionInProgress)
+                    .opacity(muted ? 0.45 : 1.0)
+                }
             }
             .disabled(!enabled || bridgeActionInProgress)
 
@@ -237,6 +272,8 @@ private struct DisplayConfigurationRow: View {
         pendingScalingFactors.removeValue(forKey: row.displayId)
         invalidScalingFactorDisplayIds.remove(row.displayId)
         targetFps = Double(Self.clampedTargetFps(row))
+        muted = row.muted
+        volume = Double(row.volume)
     }
 
     private static func formattedScalingFactor(_ factor: Double) -> String {
@@ -244,7 +281,7 @@ private struct DisplayConfigurationRow: View {
     }
 
     private static func clampedTargetFps(_ row: BridgeDisplayConfigRow) -> UInt32 {
-        min(row.targetFps, row.maxFps)
+        min(max(row.targetFps, 1), row.maxFps)
     }
 
     private func commitScalingFactor() {
@@ -298,6 +335,7 @@ private struct DisplayConfigurationRow: View {
     }
 
     private func setTargetFps(_ fps: UInt32) {
+        let fps = min(max(fps, 1), row.maxFps)
         performAsyncBridgeAction {
             try await store.setTargetFpsAsync(
                 wallpaperId: wallpaperId,
@@ -305,6 +343,20 @@ private struct DisplayConfigurationRow: View {
                 fps: fps
             )
             targetFps = Double(fps)
+        }
+    }
+
+    private func setMuted(_ muted: Bool) {
+        performAsyncBridgeAction {
+            try await store.setMutedAsync(wallpaperId: wallpaperId, muted: muted)
+            self.muted = muted
+        }
+    }
+
+    private func setVolume(_ volume: Float) {
+        performAsyncBridgeAction {
+            try await store.setVolumeAsync(wallpaperId: wallpaperId, volume: volume)
+            self.volume = Double(volume)
         }
     }
 
@@ -327,7 +379,7 @@ private struct DisplayConfigurationRow: View {
     }
 }
 
-private struct ScalingFactorValidationError: LocalizedError {
+struct ScalingFactorValidationError: LocalizedError {
     var errorDescription: String? {
         "Scaling factor must be greater than 0."
     }

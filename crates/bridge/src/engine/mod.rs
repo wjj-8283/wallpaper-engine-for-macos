@@ -2,4 +2,6 @@ mod activation;
 mod facade;
 
 pub use activation::{ActivationInputs, WallpaperAssignmentExt};
-pub use facade::{EngineFacade, FakeEngineFacade, RealEngineFacade};
+#[cfg(test)]
+pub use facade::FakeEngineFacade;
+pub use facade::{EngineFacade, RealEngineFacade};

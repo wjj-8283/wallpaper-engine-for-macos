@@ -6,7 +6,8 @@ pub mod wallpaper;
 pub mod writer;
 
 pub use app::{
-    AppConfig, FilterCfg, GeneralCfg, MonitorCfg, SerializedSelector, UiCfg, WindowGeom,
+    AppConfig, FilterCfg, GeneralCfg, MonitorCfg, MonitorSettingsCfg, SerializedSelector, UiCfg,
+    WindowGeom,
 };
 pub use store::{ConfigLoad, ConfigStore};
 pub use wallpaper::{AudioCfg, MonitorRender, WallpaperConfig};

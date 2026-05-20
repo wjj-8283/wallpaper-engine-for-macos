@@ -732,10 +732,50 @@ public protocol WallpaperBridgeProtocol : AnyObject {
     /**
      * # Errors
      *
+     * Returns an error when the display id is unknown, not in mirror mode, or
+     * the display update fails.
+     */
+    func setMirrorMuted(displayId: String, muted: Bool) async throws  -> BridgeDisplayMutationBundle
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, the
+     * factor is invalid, or the display update fails.
+     */
+    func setMirrorScalingFactor(displayId: String, factor: Double) async throws  -> BridgeDisplayMutationBundle
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, or
+     * the display update fails.
+     */
+    func setMirrorScalingMode(displayId: String, mode: BridgeScalingMode) async throws  -> BridgeDisplayMutationBundle
+    
+    /**
+     * # Errors
+     *
      * Returns an error when the display id, target display id, or mirror graph
      * is invalid.
      */
     func setMirrorTarget(displayId: String, targetDisplayId: String) async throws  -> BridgeDisplayMutationBundle
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, or
+     * the display update fails.
+     */
+    func setMirrorTargetFps(displayId: String, fps: UInt32) async throws  -> BridgeDisplayMutationBundle
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, the
+     * volume is invalid, or the display update fails.
+     */
+    func setMirrorVolume(displayId: String, volume: Float) async throws  -> BridgeDisplayMutationBundle
     
     /**
      * # Errors
@@ -1435,6 +1475,75 @@ open func setLaunchAtLogin(enabled: Bool)async throws  -> BridgeDisplayMutationB
     /**
      * # Errors
      *
+     * Returns an error when the display id is unknown, not in mirror mode, or
+     * the display update fails.
+     */
+open func setMirrorMuted(displayId: String, muted: Bool)async throws  -> BridgeDisplayMutationBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_mirror_muted(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(displayId),FfiConverterBool.lower(muted)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeDisplayMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, the
+     * factor is invalid, or the display update fails.
+     */
+open func setMirrorScalingFactor(displayId: String, factor: Double)async throws  -> BridgeDisplayMutationBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_mirror_scaling_factor(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(displayId),FfiConverterDouble.lower(factor)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeDisplayMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, or
+     * the display update fails.
+     */
+open func setMirrorScalingMode(displayId: String, mode: BridgeScalingMode)async throws  -> BridgeDisplayMutationBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_mirror_scaling_mode(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(displayId),FfiConverterTypeBridgeScalingMode.lower(mode)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeDisplayMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+    
+    /**
+     * # Errors
+     *
      * Returns an error when the display id, target display id, or mirror graph
      * is invalid.
      */
@@ -1445,6 +1554,52 @@ open func setMirrorTarget(displayId: String, targetDisplayId: String)async throw
                 uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_mirror_target(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(displayId),FfiConverterString.lower(targetDisplayId)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeDisplayMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, or
+     * the display update fails.
+     */
+open func setMirrorTargetFps(displayId: String, fps: UInt32)async throws  -> BridgeDisplayMutationBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_mirror_target_fps(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(displayId),FfiConverterUInt32.lower(fps)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeDisplayMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown, not in mirror mode, the
+     * volume is invalid, or the display update fails.
+     */
+open func setMirrorVolume(displayId: String, volume: Float)async throws  -> BridgeDisplayMutationBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_mirror_volume(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(displayId),FfiConverterFloat.lower(volume)
                 )
             },
             pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
@@ -1758,12 +1913,14 @@ public struct BridgeDisplayConfigRow {
     public var scalingFactor: Double
     public var targetFps: UInt32
     public var maxFps: UInt32
+    public var muted: Bool
+    public var volume: Float
     public var dirty: Bool
     public var canRestoreDefaults: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displayId: String, title: String, enabled: Bool, scalingMode: BridgeScalingMode, scalingFactor: Double, targetFps: UInt32, maxFps: UInt32, dirty: Bool, canRestoreDefaults: Bool) {
+    public init(displayId: String, title: String, enabled: Bool, scalingMode: BridgeScalingMode, scalingFactor: Double, targetFps: UInt32, maxFps: UInt32, muted: Bool, volume: Float, dirty: Bool, canRestoreDefaults: Bool) {
         self.displayId = displayId
         self.title = title
         self.enabled = enabled
@@ -1771,6 +1928,8 @@ public struct BridgeDisplayConfigRow {
         self.scalingFactor = scalingFactor
         self.targetFps = targetFps
         self.maxFps = maxFps
+        self.muted = muted
+        self.volume = volume
         self.dirty = dirty
         self.canRestoreDefaults = canRestoreDefaults
     }
@@ -1801,6 +1960,12 @@ extension BridgeDisplayConfigRow: Equatable, Hashable {
         if lhs.maxFps != rhs.maxFps {
             return false
         }
+        if lhs.muted != rhs.muted {
+            return false
+        }
+        if lhs.volume != rhs.volume {
+            return false
+        }
         if lhs.dirty != rhs.dirty {
             return false
         }
@@ -1818,6 +1983,8 @@ extension BridgeDisplayConfigRow: Equatable, Hashable {
         hasher.combine(scalingFactor)
         hasher.combine(targetFps)
         hasher.combine(maxFps)
+        hasher.combine(muted)
+        hasher.combine(volume)
         hasher.combine(dirty)
         hasher.combine(canRestoreDefaults)
     }
@@ -1838,6 +2005,8 @@ public struct FfiConverterTypeBridgeDisplayConfigRow: FfiConverterRustBuffer {
                 scalingFactor: FfiConverterDouble.read(from: &buf), 
                 targetFps: FfiConverterUInt32.read(from: &buf), 
                 maxFps: FfiConverterUInt32.read(from: &buf), 
+                muted: FfiConverterBool.read(from: &buf), 
+                volume: FfiConverterFloat.read(from: &buf), 
                 dirty: FfiConverterBool.read(from: &buf), 
                 canRestoreDefaults: FfiConverterBool.read(from: &buf)
         )
@@ -1851,6 +2020,8 @@ public struct FfiConverterTypeBridgeDisplayConfigRow: FfiConverterRustBuffer {
         FfiConverterDouble.write(value.scalingFactor, into: &buf)
         FfiConverterUInt32.write(value.targetFps, into: &buf)
         FfiConverterUInt32.write(value.maxFps, into: &buf)
+        FfiConverterBool.write(value.muted, into: &buf)
+        FfiConverterFloat.write(value.volume, into: &buf)
         FfiConverterBool.write(value.dirty, into: &buf)
         FfiConverterBool.write(value.canRestoreDefaults, into: &buf)
     }
@@ -1961,16 +2132,28 @@ public struct BridgeDisplaySettingsRow {
     public var mode: BridgeDisplayMode
     public var mirrorTargets: [String]
     public var selectedMirrorTarget: String?
+    public var scalingMode: BridgeScalingMode
+    public var scalingFactor: Double
+    public var targetFps: UInt32
+    public var maxFps: UInt32
+    public var muted: Bool
+    public var volume: Float
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displayId: String, title: String, enabled: Bool, mode: BridgeDisplayMode, mirrorTargets: [String], selectedMirrorTarget: String?) {
+    public init(displayId: String, title: String, enabled: Bool, mode: BridgeDisplayMode, mirrorTargets: [String], selectedMirrorTarget: String?, scalingMode: BridgeScalingMode, scalingFactor: Double, targetFps: UInt32, maxFps: UInt32, muted: Bool, volume: Float) {
         self.displayId = displayId
         self.title = title
         self.enabled = enabled
         self.mode = mode
         self.mirrorTargets = mirrorTargets
         self.selectedMirrorTarget = selectedMirrorTarget
+        self.scalingMode = scalingMode
+        self.scalingFactor = scalingFactor
+        self.targetFps = targetFps
+        self.maxFps = maxFps
+        self.muted = muted
+        self.volume = volume
     }
 }
 
@@ -1996,6 +2179,24 @@ extension BridgeDisplaySettingsRow: Equatable, Hashable {
         if lhs.selectedMirrorTarget != rhs.selectedMirrorTarget {
             return false
         }
+        if lhs.scalingMode != rhs.scalingMode {
+            return false
+        }
+        if lhs.scalingFactor != rhs.scalingFactor {
+            return false
+        }
+        if lhs.targetFps != rhs.targetFps {
+            return false
+        }
+        if lhs.maxFps != rhs.maxFps {
+            return false
+        }
+        if lhs.muted != rhs.muted {
+            return false
+        }
+        if lhs.volume != rhs.volume {
+            return false
+        }
         return true
     }
 
@@ -2006,6 +2207,12 @@ extension BridgeDisplaySettingsRow: Equatable, Hashable {
         hasher.combine(mode)
         hasher.combine(mirrorTargets)
         hasher.combine(selectedMirrorTarget)
+        hasher.combine(scalingMode)
+        hasher.combine(scalingFactor)
+        hasher.combine(targetFps)
+        hasher.combine(maxFps)
+        hasher.combine(muted)
+        hasher.combine(volume)
     }
 }
 
@@ -2022,7 +2229,13 @@ public struct FfiConverterTypeBridgeDisplaySettingsRow: FfiConverterRustBuffer {
                 enabled: FfiConverterBool.read(from: &buf), 
                 mode: FfiConverterTypeBridgeDisplayMode.read(from: &buf), 
                 mirrorTargets: FfiConverterSequenceString.read(from: &buf), 
-                selectedMirrorTarget: FfiConverterOptionString.read(from: &buf)
+                selectedMirrorTarget: FfiConverterOptionString.read(from: &buf), 
+                scalingMode: FfiConverterTypeBridgeScalingMode.read(from: &buf), 
+                scalingFactor: FfiConverterDouble.read(from: &buf), 
+                targetFps: FfiConverterUInt32.read(from: &buf), 
+                maxFps: FfiConverterUInt32.read(from: &buf), 
+                muted: FfiConverterBool.read(from: &buf), 
+                volume: FfiConverterFloat.read(from: &buf)
         )
     }
 
@@ -2033,6 +2246,12 @@ public struct FfiConverterTypeBridgeDisplaySettingsRow: FfiConverterRustBuffer {
         FfiConverterTypeBridgeDisplayMode.write(value.mode, into: &buf)
         FfiConverterSequenceString.write(value.mirrorTargets, into: &buf)
         FfiConverterOptionString.write(value.selectedMirrorTarget, into: &buf)
+        FfiConverterTypeBridgeScalingMode.write(value.scalingMode, into: &buf)
+        FfiConverterDouble.write(value.scalingFactor, into: &buf)
+        FfiConverterUInt32.write(value.targetFps, into: &buf)
+        FfiConverterUInt32.write(value.maxFps, into: &buf)
+        FfiConverterBool.write(value.muted, into: &buf)
+        FfiConverterFloat.write(value.volume, into: &buf)
     }
 }
 
@@ -2311,17 +2530,21 @@ public struct BridgeMonitorInfoRow {
     public var title: String
     public var wallpaperId: String
     public var wallpaperTitle: String
+    public var mirrorTargetDisplayId: String?
+    public var mirrorTargetTitle: String?
     public var scalingMode: String
     public var targetFps: String
     public var audioResponse: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displayId: String, title: String, wallpaperId: String, wallpaperTitle: String, scalingMode: String, targetFps: String, audioResponse: Bool) {
+    public init(displayId: String, title: String, wallpaperId: String, wallpaperTitle: String, mirrorTargetDisplayId: String?, mirrorTargetTitle: String?, scalingMode: String, targetFps: String, audioResponse: Bool) {
         self.displayId = displayId
         self.title = title
         self.wallpaperId = wallpaperId
         self.wallpaperTitle = wallpaperTitle
+        self.mirrorTargetDisplayId = mirrorTargetDisplayId
+        self.mirrorTargetTitle = mirrorTargetTitle
         self.scalingMode = scalingMode
         self.targetFps = targetFps
         self.audioResponse = audioResponse
@@ -2344,6 +2567,12 @@ extension BridgeMonitorInfoRow: Equatable, Hashable {
         if lhs.wallpaperTitle != rhs.wallpaperTitle {
             return false
         }
+        if lhs.mirrorTargetDisplayId != rhs.mirrorTargetDisplayId {
+            return false
+        }
+        if lhs.mirrorTargetTitle != rhs.mirrorTargetTitle {
+            return false
+        }
         if lhs.scalingMode != rhs.scalingMode {
             return false
         }
@@ -2361,6 +2590,8 @@ extension BridgeMonitorInfoRow: Equatable, Hashable {
         hasher.combine(title)
         hasher.combine(wallpaperId)
         hasher.combine(wallpaperTitle)
+        hasher.combine(mirrorTargetDisplayId)
+        hasher.combine(mirrorTargetTitle)
         hasher.combine(scalingMode)
         hasher.combine(targetFps)
         hasher.combine(audioResponse)
@@ -2379,6 +2610,8 @@ public struct FfiConverterTypeBridgeMonitorInfoRow: FfiConverterRustBuffer {
                 title: FfiConverterString.read(from: &buf), 
                 wallpaperId: FfiConverterString.read(from: &buf), 
                 wallpaperTitle: FfiConverterString.read(from: &buf), 
+                mirrorTargetDisplayId: FfiConverterOptionString.read(from: &buf), 
+                mirrorTargetTitle: FfiConverterOptionString.read(from: &buf), 
                 scalingMode: FfiConverterString.read(from: &buf), 
                 targetFps: FfiConverterString.read(from: &buf), 
                 audioResponse: FfiConverterBool.read(from: &buf)
@@ -2390,6 +2623,8 @@ public struct FfiConverterTypeBridgeMonitorInfoRow: FfiConverterRustBuffer {
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.wallpaperId, into: &buf)
         FfiConverterString.write(value.wallpaperTitle, into: &buf)
+        FfiConverterOptionString.write(value.mirrorTargetDisplayId, into: &buf)
+        FfiConverterOptionString.write(value.mirrorTargetTitle, into: &buf)
         FfiConverterString.write(value.scalingMode, into: &buf)
         FfiConverterString.write(value.targetFps, into: &buf)
         FfiConverterBool.write(value.audioResponse, into: &buf)
@@ -4377,7 +4612,22 @@ private var initializationResult: InitializationResult = {
     if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_launch_at_login() != 35969) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_mirror_muted() != 46663) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_mirror_scaling_factor() != 13557) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_mirror_scaling_mode() != 56795) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_mirror_target() != 35966) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_mirror_target_fps() != 48385) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_mirror_volume() != 44604) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_muted() != 46581) {
