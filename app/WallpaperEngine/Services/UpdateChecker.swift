@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 private let githubAPIBase = URL(string: "https://api.github.com")!
 private let repositorySlug = "bigsaltyfishes/wallpaper-engine-for-macos"
@@ -10,7 +11,7 @@ enum UpdateCheckStatus: Equatable {
     case checking
     case updateAvailable
 
-    var label: String {
+    var label: LocalizedStringKey {
         switch self {
         case .notChecked:
             "Updates not yet checked"
