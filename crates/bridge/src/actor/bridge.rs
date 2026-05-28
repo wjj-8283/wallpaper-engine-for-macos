@@ -563,21 +563,18 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
         }
         .build()?;
         let snapshot = self.engine.display_snapshot();
-        if scenes.len()
-            != snapshot
-                .iter()
-                .filter(|entry| {
-                    entry.window_active
-                        && matches!(entry.assignment, Some(WallpaperAssignment::Direct(_)))
-                })
-                .count()
-        {
+        let has_direct_runtime = |entry: &&DisplaySnapshotEntry| {
+            entry.handle.is_some()
+                && matches!(entry.assignment, Some(WallpaperAssignment::Direct(_)))
+        };
+
+        if scenes.len() != snapshot.iter().filter(has_direct_runtime).count() {
             return Ok(None);
         }
 
         if scenes.iter().all(|scene| {
             snapshot.iter().any(|entry| {
-                entry.window_active
+                entry.handle.is_some()
                     && entry
                         .assignment
                         .as_ref()

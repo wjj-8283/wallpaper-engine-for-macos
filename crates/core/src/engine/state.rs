@@ -71,10 +71,11 @@ impl EngineState {
                 .iter()
                 .filter_map(|record| {
                     let desc = record.model.live_display.clone()?;
+                    let handle = record.runtime.as_ref().and(record.handle);
                     Some(DisplaySnapshotEntry {
                         identity: desc.identity.clone(),
                         desc,
-                        handle: record.handle,
+                        handle,
                         window_active: record.model.window_active,
                         assignment: record.model.assignment.clone(),
                     })
@@ -474,5 +475,29 @@ mod tests {
                 &updated
             )))
         );
+    }
+
+    #[test]
+    fn snapshot_hides_reserved_handle_without_live_runtime() {
+        let display = DisplayDesc::new(7, 0, 0, 1920, 1080, 1.0);
+        let mut state = EngineState::with_display_model(DisplayStateModel {
+            records: vec![DisplayRecord {
+                key: DisplayKey::LiveDisplayId(7),
+                live_display: Some(display),
+                assignment: Some(WallpaperAssignment::Direct(
+                    SceneTemplate::builder("/tmp/project.json").build().unwrap(),
+                )),
+                window_active: false,
+                runtime_open: false,
+                primary_inheritance_consumed: false,
+            }],
+        });
+        let handle = state.reserve_handle_for_key(DisplayKey::LiveDisplayId(7));
+        state.display_records[0].handle = Some(handle);
+
+        let snapshot = state.snapshot();
+
+        assert_eq!(snapshot.displays.len(), 1);
+        assert_eq!(snapshot.displays[0].handle, None);
     }
 }

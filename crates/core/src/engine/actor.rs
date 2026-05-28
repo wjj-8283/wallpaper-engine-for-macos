@@ -163,7 +163,7 @@ impl EngineActor {
 
     #[allow(clippy::needless_pass_by_value)]
     pub fn destroy_window_for(&mut self, selector: DisplaySelector) -> Result<(), EngineError> {
-        self.update_display_state(|model| model.set_window_active(&selector, false).map(|_| ()))
+        self.update_display_state(|model| model.destroy_window(&selector).map(|_| ()))
     }
 
     #[allow(clippy::needless_pass_by_value)]

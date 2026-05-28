@@ -32,7 +32,9 @@ pub struct DisplayRecord {
 
 impl DisplayRecord {
     pub fn should_have_runtime(&self) -> bool {
-        self.window_active && self.live_display.is_some() && self.assignment.is_some()
+        (self.window_active || self.runtime_open)
+            && self.live_display.is_some()
+            && self.assignment.is_some()
     }
 
     pub fn scene_desc(&self) -> Result<Option<SceneDesc>, EngineError> {
@@ -205,6 +207,22 @@ impl DisplayStateModel {
         self.plan_actions()
     }
 
+    pub fn destroy_window(
+        &mut self,
+        selector: &DisplaySelector,
+    ) -> Result<Vec<DisplayAction>, EngineError> {
+        let key = DisplayKey::from_selector(selector)?;
+        let record = self.ensure_record(key.clone());
+        let was_open = record.runtime_open;
+        record.window_active = false;
+        record.runtime_open = false;
+        if was_open {
+            Ok(vec![DisplayAction::Close(key)])
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
     pub fn resolved_assignment(
         &self,
         key: &DisplayKey,
@@ -251,8 +269,9 @@ impl DisplayStateModel {
         let mut actions = Vec::new();
         for record in &self.records {
             let has_assignment = self.resolved_assignment(&record.key)?.is_some();
-            let should_be_open =
-                record.window_active && record.live_display.is_some() && has_assignment;
+            let should_be_open = (record.window_active || record.runtime_open)
+                && record.live_display.is_some()
+                && has_assignment;
             match (record.runtime_open, should_be_open) {
                 (false, true) => actions.push(DisplayAction::Open(record.key.clone())),
                 (true, false) => actions.push(DisplayAction::Close(record.key.clone())),
@@ -477,6 +496,7 @@ impl DisplayStateModel {
         for record in &mut self.records {
             if record.live_display.is_some() && !requested.contains(&record.key) {
                 record.window_active = false;
+                record.runtime_open = false;
             }
         }
 
@@ -1725,6 +1745,73 @@ mod tests {
             model.plan_actions().unwrap(),
             vec![DisplayAction::Rebuild(DisplayKey::Primary)]
         );
+    }
+
+    #[test]
+    fn inactive_already_open_assigned_display_plans_rebuild() {
+        let mut model = DisplayStateModel::from_config(WallpaperEngineConfig {
+            displays: vec![DisplayConfig {
+                selector: DisplaySelector::Primary,
+                window_active: false,
+                wallpaper: Some(WallpaperAssignment::Direct(template("/tmp/primary.json"))),
+            }],
+        })
+        .unwrap();
+        let record = model.ensure_record(DisplayKey::Primary);
+        record.live_display = Some(display(1, identity("primary")));
+        record.runtime_open = true;
+
+        assert_eq!(
+            model.plan_actions().unwrap(),
+            vec![DisplayAction::Rebuild(DisplayKey::Primary)]
+        );
+    }
+
+    #[test]
+    fn refresh_preserves_inactive_existing_runtime() {
+        let mut model = DisplayStateModel::from_config(WallpaperEngineConfig {
+            displays: vec![DisplayConfig {
+                selector: DisplaySelector::Primary,
+                window_active: false,
+                wallpaper: Some(WallpaperAssignment::Direct(template("/tmp/primary.json"))),
+            }],
+        })
+        .unwrap();
+        let record = model.ensure_record(DisplayKey::Primary);
+        record.live_display = Some(display(1, identity("primary")));
+        record.runtime_open = true;
+
+        let actions = model
+            .refresh_connected(
+                display(1, identity("primary")),
+                vec![display(1, identity("primary"))],
+            )
+            .unwrap();
+
+        let record = model.record(&DisplayKey::Primary).unwrap();
+        assert!(!record.window_active);
+        assert!(record.runtime_open);
+        assert_eq!(actions, vec![DisplayAction::Rebuild(DisplayKey::Primary)]);
+    }
+
+    #[test]
+    fn destroy_window_closes_inactive_existing_runtime() {
+        let mut model = DisplayStateModel::from_config(WallpaperEngineConfig {
+            displays: vec![DisplayConfig {
+                selector: DisplaySelector::Primary,
+                window_active: false,
+                wallpaper: Some(WallpaperAssignment::Direct(template("/tmp/primary.json"))),
+            }],
+        })
+        .unwrap();
+        let record = model.ensure_record(DisplayKey::Primary);
+        record.live_display = Some(display(1, identity("primary")));
+        record.runtime_open = true;
+
+        let actions = model.destroy_window(&DisplaySelector::Primary).unwrap();
+
+        assert_eq!(actions, vec![DisplayAction::Close(DisplayKey::Primary)]);
+        assert!(!model.record(&DisplayKey::Primary).unwrap().runtime_open);
     }
 
     #[test]

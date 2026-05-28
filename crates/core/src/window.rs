@@ -111,6 +111,7 @@ impl MouseButtons {
         Self { mask }
     }
 
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn states(self) -> Vec<MouseButtonState> {
         (0..32)
@@ -160,6 +161,7 @@ impl MouseButtonEdges {
         self.down
     }
 
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn states(self) -> Vec<MouseButtonState> {
         let transitions = self.pressed.mask | self.released.mask;
@@ -187,6 +189,29 @@ impl MouseButtonEdges {
                     states.push(MouseButtonState {
                         button,
                         pressed: (self.down.mask & mask) != 0,
+                    });
+                }
+                states
+            })
+            .collect()
+    }
+
+    #[must_use]
+    pub(crate) fn transitions(self) -> Vec<MouseButtonState> {
+        (0..32)
+            .flat_map(|button| {
+                let mask = 1u64 << button;
+                let mut states = Vec::with_capacity(2);
+                if (self.pressed.mask & mask) != 0 {
+                    states.push(MouseButtonState {
+                        button,
+                        pressed: true,
+                    });
+                }
+                if (self.released.mask & mask) != 0 {
+                    states.push(MouseButtonState {
+                        button,
+                        pressed: false,
                     });
                 }
                 states
@@ -229,7 +254,10 @@ impl MouseButtonTracker {
     }
 
     pub(crate) fn sync_down_mask(&mut self, mask: u64) {
-        self.down = mask & u64::from(u32::MAX);
+        let next = mask & u64::from(u32::MAX);
+        self.pressed |= next & !self.down;
+        self.released |= self.down & !next;
+        self.down = next;
     }
 
     #[must_use]
@@ -976,6 +1004,39 @@ mod tests {
         assert_eq!(
             idle.states().iter().filter(|state| state.pressed).count(),
             0
+        );
+    }
+
+    #[test]
+    fn mouse_button_tracker_level_state_reports_only_real_edges() {
+        let mut tracker = MouseButtonTracker::new();
+
+        tracker.sync_down_mask(1);
+        let press = tracker.consume_edges();
+        assert_eq!(press.down().mask(), 1);
+        assert_eq!(
+            press
+                .states()
+                .iter()
+                .filter(|state| state.button == 0 && state.pressed)
+                .count(),
+            1
+        );
+
+        tracker.sync_down_mask(1);
+        let held = tracker.consume_edges();
+        assert_eq!(held.down().mask(), 1);
+        assert!(held.transitions().is_empty());
+
+        tracker.sync_down_mask(0);
+        let release = tracker.consume_edges();
+        assert_eq!(release.down().mask(), 0);
+        assert_eq!(
+            release.transitions()[0],
+            MouseButtonState {
+                button: 0,
+                pressed: false,
+            }
         );
     }
 

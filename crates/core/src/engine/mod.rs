@@ -639,7 +639,7 @@ impl WallpaperEngine {
                 self.set_mouse_position(handle, position.x, position.y)
                     .await?;
             }
-            for button in update.buttons.states() {
+            for button in update.buttons.transitions() {
                 self.set_mouse_button(handle, button.button, button.pressed)
                     .await?;
             }
@@ -740,6 +740,7 @@ mod tests {
     use crate::{
         display::state::{DisplayAction, DisplayKey, DisplayRecord},
         engine::state::DisplayRuntimeRecord,
+        window::MouseButtonState,
     };
 
     fn engine_with_display_records(records: Vec<DisplayRecord>) -> WallpaperEngine {
@@ -1166,6 +1167,7 @@ mod tests {
         model.apply_reconcile(&[]).unwrap();
 
         assert!(model.records.iter().all(|record| !record.window_active));
+        assert!(model.records.iter().all(|record| !record.runtime_open));
     }
 
     #[test]
@@ -1758,6 +1760,27 @@ mod tests {
         assert!(states[0].pressed);
         assert_eq!(states[1].button, 0);
         assert!(!states[1].pressed);
+    }
+
+    #[test]
+    fn mouse_update_for_display_does_not_forward_held_level_state_as_press() {
+        let display = crate::DisplayDesc::new(7, 0, 0, 1920, 1080, 1.0);
+        let state = MousePollState {
+            point: NSPoint::new(960.0, 540.0),
+            buttons: MouseButtonEdges::from_masks(1, 0, 0),
+        };
+
+        let update = mouse_update_for_display(state, &display);
+
+        assert!(update.entered);
+        assert!(update.buttons.transitions().is_empty());
+        assert_eq!(
+            update.buttons.states()[0],
+            MouseButtonState {
+                button: 0,
+                pressed: true,
+            }
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
