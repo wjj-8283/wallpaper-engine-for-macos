@@ -1,38 +1,54 @@
 use crate::{
-    ShaderError, ShaderResult,
-    preprocess::PreprocessedStage,
-    syntax::{ParsingContext, ShaderModule, ShaderSourceText},
+    ShaderError, ShaderResult, pipeline::stage::ParsedStage, preprocess::PreprocessedStage,
 };
 
 /// Stage-local pipeline inputs.
-#[derive(Debug)]
-pub struct ProgramStageInputs<'src> {
+pub(super) struct ProgramStageInputs<'src> {
     /// Parsed stages in request order.
     stages: Vec<ProgramStageInput<'src>>,
 }
 
-impl<'src> ProgramStageInputs<'src> {
-    /// Constructs paired preprocessed and metadata-preserving stage inputs.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the stage and metadata-source lists differ in
-    /// length, when paired stages have different kinds, or when either source
-    /// cannot be parsed.
-    #[inline]
-    #[allow(clippy::single_call_fn)]
-    pub fn new(
-        stages: &'src [PreprocessedStage],
-        metadata_sources: &'src [PreprocessedStage],
-    ) -> ShaderResult<Self> {
-        if stages.len() != metadata_sources.len() {
+/// Preprocessed source slices for normal compilation and metadata extraction.
+pub(super) struct ProgramStageSources<'src> {
+    /// Sources with conditionals evaluated for compilation.
+    pub(super) stages: &'src [PreprocessedStage],
+    /// Sources preserving conditionals for legacy metadata extraction.
+    pub(super) metadata_sources: &'src [PreprocessedStage],
+}
+
+impl<'src> TryFrom<&'src [PreprocessedStage]> for ProgramStageInputs<'src> {
+    type Error = ShaderError;
+
+    /// Parses all preprocessed stages.
+    fn try_from(stages: &'src [PreprocessedStage]) -> ShaderResult<Self> {
+        let stages = stages
+            .iter()
+            .map(|stage| {
+                Ok(ProgramStageInput {
+                    stage,
+                    module: ParsedStage::try_from(stage)?,
+                    metadata_module: ParsedStage::try_from(stage)?,
+                })
+            })
+            .collect::<ShaderResult<Vec<_>>>()?;
+        Ok(Self { stages })
+    }
+}
+
+impl<'src> TryFrom<ProgramStageSources<'src>> for ProgramStageInputs<'src> {
+    type Error = ShaderError;
+
+    /// Parses preprocessed stages and separate metadata source stages.
+    fn try_from(sources: ProgramStageSources<'src>) -> ShaderResult<Self> {
+        if sources.stages.len() != sources.metadata_sources.len() {
             return Err(ShaderError::invalid_request(
                 "preprocessed stage count does not match metadata stage count",
             ));
         }
-        let stages = stages
+        let stages = sources
+            .stages
             .iter()
-            .zip(metadata_sources)
+            .zip(sources.metadata_sources)
             .map(|(stage, metadata_stage)| {
                 if stage.kind() != metadata_stage.kind() {
                     return Err(ShaderError::invalid_request(
@@ -41,87 +57,29 @@ impl<'src> ProgramStageInputs<'src> {
                 }
                 Ok(ProgramStageInput {
                     stage,
-                    module: ProgramStageInput::parse(stage)?,
-                    metadata_module: ProgramStageInput::parse(metadata_stage)?,
+                    module: ParsedStage::try_from(stage)?,
+                    metadata_module: ParsedStage::try_from(metadata_stage)?,
                 })
             })
             .collect::<ShaderResult<Vec<_>>>()?;
         Ok(Self { stages })
     }
+}
 
-    /// Parses all preprocessed stages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when any preprocessed stage cannot be parsed into a
-    /// typed syntax module.
-    pub fn parse(stages: &'src [PreprocessedStage]) -> ShaderResult<Self> {
-        Self::new(stages, stages)
-    }
-
+impl<'src> ProgramStageInputs<'src> {
     /// Returns parsed stages.
-    #[must_use]
-    pub fn stages(&self) -> &[ProgramStageInput<'src>] {
+    pub(super) fn stages(&self) -> &[ProgramStageInput<'src>] {
         &self.stages
     }
 }
 
 /// One preprocessed stage and its parsed syntax module.
-#[derive(Debug)]
-pub struct ProgramStageInput<'src> {
+pub(super) struct ProgramStageInput<'src> {
     /// Preprocessed stage source.
-    pub stage: &'src PreprocessedStage,
+    pub(super) stage: &'src PreprocessedStage,
     /// Parsed syntax module.
-    pub module: ShaderModule<'src>,
+    pub(super) module: ParsedStage<'src>,
     /// Parsed metadata syntax module with includes expanded before condition
     /// stripping.
-    pub metadata_module: ShaderModule<'src>,
-}
-
-impl ProgramStageInput<'_> {
-    /// Parses preprocessed stage source into a typed syntax module.
-    fn parse(stage: &PreprocessedStage) -> ShaderResult<ShaderModule<'_>> {
-        let context = ParsingContext::new(stage.kind(), ShaderSourceText::new(stage.source()))?;
-        context.parse()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ShaderStageKind;
-
-    #[test]
-    fn parse_paired_rejects_stage_count_mismatch() {
-        let stages = [stage(ShaderStageKind::Vertex)];
-        let metadata_sources = [];
-
-        let Err(err) = ProgramStageInputs::new(&stages, &metadata_sources) else {
-            panic!("mismatched stage counts are rejected");
-        };
-
-        assert!(
-            err.to_string()
-                .contains("preprocessed stage count does not match metadata stage count")
-        );
-    }
-
-    #[test]
-    fn parse_paired_rejects_stage_kind_mismatch() {
-        let stages = [stage(ShaderStageKind::Vertex)];
-        let metadata_sources = [stage(ShaderStageKind::Fragment)];
-
-        let Err(err) = ProgramStageInputs::new(&stages, &metadata_sources) else {
-            panic!("mismatched stage kinds are rejected");
-        };
-
-        assert!(
-            err.to_string()
-                .contains("preprocessed stage kind does not match metadata stage kind")
-        );
-    }
-
-    fn stage(kind: ShaderStageKind) -> PreprocessedStage {
-        PreprocessedStage::new(kind, "void main() {}\n".to_owned())
-    }
+    pub(super) metadata_module: ParsedStage<'src>,
 }

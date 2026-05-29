@@ -1,10 +1,12 @@
+use std::collections::BTreeMap;
+
 use crate::{
     ShaderMetadata, ShaderResult, ShaderTextureInfo,
     metadata::builder::MetadataBuilder,
     syntax::{AnnotationKind, ShaderDeclaration, ShaderModule, SyntaxItem},
 };
 
-impl ShaderModule<'_> {
+pub trait ShaderModuleMetadataExt {
     /// Extracts material metadata from this parsed shader module.
     ///
     /// The scan follows the current C++ behavior: top-level metadata before the
@@ -15,12 +17,17 @@ impl ShaderModule<'_> {
     ///
     /// Returns an error when extracted names or texture slots cannot be
     /// represented by the typed shader model.
-    pub fn extract_metadata(&self, textures: &[ShaderTextureInfo]) -> ShaderResult<ShaderMetadata> {
+    fn extract_metadata(&self, textures: &[ShaderTextureInfo]) -> ShaderResult<ShaderMetadata>;
+}
+
+impl ShaderModuleMetadataExt for ShaderModule<'_> {
+    fn extract_metadata(&self, textures: &[ShaderTextureInfo]) -> ShaderResult<ShaderMetadata> {
         let extractor = MetadataExtractor {
             module: self,
             textures,
             builder: MetadataBuilder {
-                combos: Vec::new(),
+                combo_order: Vec::new(),
+                combos: BTreeMap::new(),
                 aliases: Vec::new(),
                 default_uniforms: Vec::new(),
                 default_textures: Vec::new(),

@@ -1,7 +1,5 @@
 use std::collections::BTreeSet;
 
-use smol_str::SmolStr;
-
 use crate::{
     ComboName, DefaultTextureValue, DefaultUniformValue, MaterialAlias, ShaderComboValue,
     ShaderMetadata, ShaderProgramRequest, ShaderResult,
@@ -49,36 +47,37 @@ pub(super) struct RequestWithMetadataCombos<'request> {
     /// Original request.
     request: &'request ShaderProgramRequest,
     /// Normalized combo names already present in the request or added here.
-    seen: BTreeSet<SmolStr>,
+    seen: BTreeSet<String>,
     /// Metadata combo defaults that are not overridden by request combos.
     defaults: Vec<ShaderComboValue>,
 }
 
-impl<'request> RequestWithMetadataCombos<'request> {
-    /// Starts collecting metadata combo defaults for a request.
-    pub(super) fn new(request: &'request ShaderProgramRequest) -> Self {
+impl<'request> From<&'request ShaderProgramRequest> for RequestWithMetadataCombos<'request> {
+    fn from(request: &'request ShaderProgramRequest) -> Self {
         Self {
             request,
             seen: request
                 .combos()
                 .iter()
-                .map(|combo| combo.name().normalized_compact())
+                .map(|combo| combo.name().normalized())
                 .collect(),
             defaults: Vec::new(),
         }
     }
+}
 
+impl RequestWithMetadataCombos<'_> {
     /// Adds a metadata combo default unless a request/default value already
     /// exists for the same normalized name.
     pub(super) fn push_default(&mut self, combo: &ShaderComboValue) -> ShaderResult<()> {
-        let normalized = combo.name().normalized_compact();
+        let normalized = combo.name().normalized();
         if !self.seen.insert(normalized) {
             return Ok(());
         }
 
         self.defaults.push(ShaderComboValue::new(
             ComboName::new(combo.name().as_str())?,
-            combo.value(),
+            combo.value().to_owned(),
         ));
         Ok(())
     }
@@ -91,7 +90,7 @@ impl<'request> RequestWithMetadataCombos<'request> {
 
         let mut builder = ShaderProgramRequest::builder(self.request.shader_name().clone())
             .target(self.request.target())
-            .cache_strategy(self.request.cache_strategy().clone());
+            .cache_policy(self.request.cache_policy().clone());
 
         for stage in self.request.stages() {
             builder = builder.stage(stage.clone());

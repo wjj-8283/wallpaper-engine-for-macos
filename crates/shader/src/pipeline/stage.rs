@@ -1,29 +1,30 @@
 use crate::{
     ShaderCompiler, ShaderMetadata, ShaderReflection, ShaderReflector, ShaderResult,
     ShaderTextureInfo,
-    legalize::{Codegen, CodegenStageSource, StageInterfaceLayout, StageResourceLayout},
+    legalize::{LegalizedStageSource, Legalizer, StageInterfaceLayout, StageResourceLayout},
+    metadata::ShaderModuleMetadataExt,
     preprocess::PreprocessedStage,
-    syntax::ShaderModule,
+    syntax::{ParsingContext, ShaderModule, ShaderSourceText},
 };
 
 /// Stage-local pipeline inputs.
 pub(super) struct StagePipeline<'src, 'module, 'backend, C, R> {
     /// Preprocessed stage source.
-    pub stage: &'src PreprocessedStage,
+    pub(super) stage: &'src PreprocessedStage,
     /// Parsed stage module.
-    pub module: &'module ShaderModule<'src>,
+    pub(super) module: &'module ParsedStage<'src>,
     /// Parsed stage module used only for legacy metadata extraction.
-    pub metadata_module: &'module ShaderModule<'src>,
+    pub(super) metadata_module: &'module ParsedStage<'src>,
     /// Program-level interface layout for this stage.
-    pub interface_layout: StageInterfaceLayout,
+    pub(super) interface_layout: StageInterfaceLayout<'src>,
     /// Program-level resource layout for this stage.
-    pub resource_layout: StageResourceLayout,
+    pub(super) resource_layout: StageResourceLayout<'src>,
     /// Compiler backend.
-    pub compiler: &'backend C,
+    pub(super) compiler: &'backend C,
     /// Reflection backend.
-    pub reflector: &'backend R,
+    pub(super) reflector: &'backend R,
     /// Request texture metadata.
-    pub textures: &'module [ShaderTextureInfo],
+    pub(super) textures: &'module [ShaderTextureInfo],
 }
 
 impl<C, R> StagePipeline<'_, '_, '_, C, R>
@@ -34,7 +35,7 @@ where
     /// Parses, extracts metadata, legalizes, compiles, and reflects one stage.
     pub(super) fn compile(self) -> ShaderResult<StageOutput<C::Module>> {
         let metadata = self.metadata_module.extract_metadata(self.textures)?;
-        let legalized = Codegen::legalize_with_program_layout(
+        let legalized = Legalizer::legalize_with_program_layout(
             self.module,
             self.interface_layout,
             self.resource_layout,
@@ -53,14 +54,40 @@ where
     }
 }
 
+/// Parsed program stages retained so program-level checks can run before
+pub(super) struct ParsedStage<'src> {
+    /// Parsed shader module.
+    module: ShaderModule<'src>,
+}
+
+impl<'src> TryFrom<&'src PreprocessedStage> for ParsedStage<'src> {
+    type Error = crate::ShaderError;
+
+    /// Parses preprocessed stage source into a typed syntax module.
+    fn try_from(stage: &'src PreprocessedStage) -> ShaderResult<Self> {
+        let context = ParsingContext::new(stage.kind(), ShaderSourceText::new(stage.source()))?;
+        Ok(Self {
+            module: context.parse()?,
+        })
+    }
+}
+
+impl<'src> std::ops::Deref for ParsedStage<'src> {
+    type Target = ShaderModule<'src>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.module
+    }
+}
+
 /// Stage pipeline output retained until program merge completes.
 pub(super) struct StageOutput<M> {
     /// Extracted metadata.
-    pub metadata: ShaderMetadata,
-    /// Codegen source.
-    pub legalized: CodegenStageSource,
+    pub(super) metadata: ShaderMetadata,
+    /// Legalized source.
+    pub(super) legalized: LegalizedStageSource,
     /// Compiled artifact and backend module.
-    pub artifact: crate::CompiledStageArtifact<M>,
+    pub(super) artifact: crate::CompiledStageArtifact<M>,
     /// Reflected stage metadata.
-    pub reflection: ShaderReflection,
+    pub(super) reflection: ShaderReflection,
 }

@@ -1,5 +1,7 @@
 //! Shader source provider traits and in-memory implementation.
 
+use std::collections::BTreeMap;
+
 use crate::{IncludePath, ShaderError, ShaderResult};
 
 /// Provider used by the pipeline to read shader include sources.
@@ -19,7 +21,7 @@ pub trait ShaderSourceProvider {
 #[derive(Clone, Debug, Default)]
 pub struct InMemoryShaderSourceProvider {
     /// Include path to UTF-8 source text map.
-    sources: Vec<(IncludePath, String)>,
+    sources: BTreeMap<IncludePath, String>,
 }
 
 impl InMemoryShaderSourceProvider {
@@ -27,29 +29,20 @@ impl InMemoryShaderSourceProvider {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            sources: Vec::new(),
+            sources: BTreeMap::new(),
         }
     }
 
     /// Adds or replaces an include source.
     #[must_use]
     pub fn with_source(mut self, path: IncludePath, source: impl Into<String>) -> Self {
-        self.insert(path, source);
+        let _old = self.sources.insert(path, source.into());
         self
     }
 
     /// Adds or replaces an include source by mutable reference.
     pub fn insert(&mut self, path: IncludePath, source: impl Into<String>) {
-        let source = source.into();
-        if let Some((_, existing)) = self
-            .sources
-            .iter_mut()
-            .find(|(existing_path, _)| existing_path == &path)
-        {
-            *existing = source;
-        } else {
-            self.sources.push((path, source));
-        }
+        let _old = self.sources.insert(path, source.into());
     }
 
     /// Returns the number of include sources.
@@ -67,11 +60,7 @@ impl InMemoryShaderSourceProvider {
 
 impl ShaderSourceProvider for InMemoryShaderSourceProvider {
     fn read_to_string(&self, path: &IncludePath) -> ShaderResult<String> {
-        let Some((_, source)) = self
-            .sources
-            .iter()
-            .find(|(existing_path, _)| existing_path == path)
-        else {
+        let Some(source) = self.sources.get(path) else {
             return Err(ShaderError::IncludeNotFound { path: path.clone() });
         };
 

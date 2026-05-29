@@ -1,7 +1,5 @@
 //! Top-level declaration syntax records.
 
-use smol_str::SmolStr;
-
 use super::{ShaderAnnotation, ShaderModule, ShaderSourceText, source::SpannedSyntax};
 use crate::SourceSpan;
 
@@ -12,10 +10,10 @@ pub struct ShaderDeclaration<'src> {
     kind: DeclarationKind,
     /// Top-level interface qualifier, when present.
     qualifier: Option<TopLevelQualifier>,
-    /// Declaration type token, when known.
-    type_name: Option<SmolStr>,
-    /// Declaration identifier token, when known.
-    name: Option<SmolStr>,
+    /// Borrowed declaration type token, when known.
+    type_name: Option<&'src str>,
+    /// Borrowed declaration identifier token, when known.
+    name: Option<&'src str>,
     /// Array suffix on the declared identifier, when known.
     array_suffix: Option<DeclarationArraySuffix<'src>>,
     /// Leading layout qualifier, when present.
@@ -30,8 +28,8 @@ impl<'src> ShaderDeclaration<'src> {
     pub fn new(
         kind: DeclarationKind,
         qualifier: Option<TopLevelQualifier>,
-        type_name: Option<SmolStr>,
-        name: Option<SmolStr>,
+        type_name: Option<&'src str>,
+        name: Option<&'src str>,
         array_suffix: Option<DeclarationArraySuffix<'src>>,
         layout: Option<DeclarationLayout<'src>>,
         span: SourceSpan,
@@ -61,49 +59,38 @@ impl<'src> ShaderDeclaration<'src> {
 
     /// Returns the declared type name when known.
     #[must_use]
-    pub fn type_name(&self) -> Option<&str> {
-        self.type_name.as_deref()
+    pub const fn type_name(&self) -> Option<&'src str> {
+        self.type_name
     }
 
     /// Returns the declared type fact when known.
     #[must_use]
-    pub fn declaration_type(&self) -> Option<DeclarationType> {
-        <Self as DeclarationFacts>::declaration_type(self)
+    pub fn declaration_type(&self) -> Option<DeclarationType<'src>> {
+        <Self as DeclarationFacts<'src>>::declaration_type(self)
     }
 
     /// Returns the declared identifier when known.
     #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+    pub const fn name(&self) -> Option<&'src str> {
+        self.name
     }
 
     /// Returns the declared identifier fact when known.
     #[must_use]
-    pub fn declaration_name(&self) -> Option<DeclarationName> {
-        <Self as DeclarationFacts>::declaration_name(self)
-    }
-
-    /// Returns the declared identifier fact, including parser fallback facts
-    /// owned by the containing module.
-    #[must_use]
-    pub fn declaration_name_in(&self, module: &ShaderModule<'src>) -> Option<DeclarationName> {
-        self.declaration_name().or_else(|| {
-            module
-                .first_declarator_name(self)
-                .map(|source| DeclarationName { source })
-        })
+    pub fn declaration_name(&self) -> Option<DeclarationName<'src>> {
+        <Self as DeclarationFacts<'src>>::declaration_name(self)
     }
 
     /// Returns the array suffix on the declared identifier, when known.
     #[must_use]
     pub fn array_suffix(&self) -> Option<DeclarationArraySuffix<'src>> {
-        <Self as DeclarationFacts>::declaration_array_suffix(self)
+        <Self as DeclarationFacts<'src>>::declaration_array_suffix(self)
     }
 
     /// Returns the leading layout qualifier, when present.
     #[must_use]
     pub fn layout(&self) -> Option<DeclarationLayout<'src>> {
-        <Self as DeclarationFacts>::declaration_layout(self)
+        <Self as DeclarationFacts<'src>>::declaration_layout(self)
     }
 
     /// Returns the full declaration source span.
@@ -146,20 +133,16 @@ impl<'src> ShaderDeclaration<'src> {
 }
 
 impl<'src> DeclarationFacts<'src> for ShaderDeclaration<'src> {
-    fn declaration_name(&self) -> Option<DeclarationName> {
-        self.name.as_ref().map(|source| DeclarationName {
-            source: source.clone(),
-        })
+    fn declaration_name(&self) -> Option<DeclarationName<'src>> {
+        self.name.map(|source| DeclarationName { source })
     }
 
-    fn declaration_type(&self) -> Option<DeclarationType> {
-        self.type_name.as_ref().map(|source| DeclarationType {
-            source: source.clone(),
-        })
+    fn declaration_type(&self) -> Option<DeclarationType<'src>> {
+        self.type_name.map(|source| DeclarationType { source })
     }
 
     fn declaration_array_suffix(&self) -> Option<DeclarationArraySuffix<'src>> {
-        self.array_suffix.clone()
+        self.array_suffix
     }
 
     fn declaration_layout(&self) -> Option<DeclarationLayout<'src>> {
@@ -174,56 +157,47 @@ impl SpannedSyntax for ShaderDeclaration<'_> {
 }
 
 /// Strongly typed declaration identifier fact.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeclarationName {
-    /// Identifier text.
-    source: SmolStr,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DeclarationName<'src> {
+    /// Borrowed identifier text.
+    source: &'src str,
 }
 
-impl DeclarationName {
+impl<'src> DeclarationName<'src> {
     /// Returns the identifier text.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        self.source.as_str()
+    pub const fn as_str(self) -> &'src str {
+        self.source
     }
 }
 
 /// Strongly typed declaration type fact.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeclarationType {
-    /// Type token text.
-    source: SmolStr,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DeclarationType<'src> {
+    /// Borrowed type token text.
+    source: &'src str,
 }
 
-impl DeclarationType {
+impl<'src> DeclarationType<'src> {
     /// Returns the type token text.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        self.source.as_str()
+    pub const fn as_str(self) -> &'src str {
+        self.source
     }
 }
 
 /// Strongly typed array suffix fact.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DeclarationArraySuffix<'src> {
     /// Borrowed suffix text, including brackets.
-    pub source: &'src str,
-    /// Parsed array size expression, when the suffix is supported by resource
-    /// planning.
-    pub size: Option<DeclarationArraySize>,
+    pub(super) source: &'src str,
 }
 
 impl<'src> DeclarationArraySuffix<'src> {
     /// Returns the suffix text, including brackets.
     #[must_use]
-    pub const fn as_str(&self) -> &'src str {
+    pub const fn as_str(self) -> &'src str {
         self.source
-    }
-
-    /// Returns the parsed array size expression.
-    #[must_use]
-    pub fn size(&self) -> Option<DeclarationArraySize> {
-        self.size.clone()
     }
 }
 
@@ -231,11 +205,7 @@ impl<'src> DeclarationArraySuffix<'src> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DeclarationLayout<'src> {
     /// Borrowed layout qualifier text.
-    pub source: &'src str,
-    /// Descriptor set index in the first layout qualifier declaring a binding.
-    pub set: Option<u32>,
-    /// Descriptor binding index in the first layout qualifier declaring one.
-    pub binding: Option<u32>,
+    pub(super) source: &'src str,
 }
 
 impl<'src> DeclarationLayout<'src> {
@@ -244,36 +214,15 @@ impl<'src> DeclarationLayout<'src> {
     pub const fn as_str(self) -> &'src str {
         self.source
     }
-
-    /// Returns the descriptor set index declared with the binding, when any.
-    #[must_use]
-    pub const fn set(self) -> Option<u32> {
-        self.set
-    }
-
-    /// Returns the descriptor binding index, when any.
-    #[must_use]
-    pub const fn binding(self) -> Option<u32> {
-        self.binding
-    }
-}
-
-/// Parsed declaration array size expression.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DeclarationArraySize {
-    /// Literal numeric array length.
-    Numeric(u32),
-    /// Macro identifier array length.
-    MacroIdentifier(SmolStr),
 }
 
 /// Shared declaration facts exposed by parsed declarations.
-pub(super) trait DeclarationFacts<'src> {
+pub trait DeclarationFacts<'src> {
     /// Returns the declared identifier fact when known.
-    fn declaration_name(&self) -> Option<DeclarationName>;
+    fn declaration_name(&self) -> Option<DeclarationName<'src>>;
 
     /// Returns the declared type fact when known.
-    fn declaration_type(&self) -> Option<DeclarationType>;
+    fn declaration_type(&self) -> Option<DeclarationType<'src>>;
 
     /// Returns the declared array suffix when known.
     fn declaration_array_suffix(&self) -> Option<DeclarationArraySuffix<'src>>;

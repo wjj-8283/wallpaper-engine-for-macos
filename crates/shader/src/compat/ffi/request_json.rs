@@ -1,21 +1,20 @@
 //! Bridge request JSON DTOs.
 
 use crate::{
-    ComboName, ProjectPropertyBinding, PropertyName, PropertyValue, ShaderCacheStrategy,
+    ComboName, ProjectPropertyBinding, PropertyName, PropertyValue, ShaderCachePolicy,
     ShaderComboValue, ShaderName, ShaderProgramRequest, ShaderStageKind, ShaderStageSource,
     ShaderTarget, ShaderTextureInfo, TextureComponentState, TextureFormatHint, TextureSlot,
 };
 
 /// Bridge request DTO.
 #[derive(Debug, serde::Deserialize)]
-pub(super) struct RequestDto {
+pub(in crate::compat::ffi) struct RequestDto {
     /// Shader program name.
     shader_name: String,
     /// Requested target backend.
     target: Option<TargetDto>,
     /// Cache behavior.
-    #[serde(alias = "cache_policy")]
-    cache_strategy: Option<CacheStrategyDto>,
+    cache_policy: Option<CachePolicyDto>,
     /// Stage source DTOs.
     stages: Vec<StageSourceDto>,
     /// Combo DTOs.
@@ -31,10 +30,10 @@ pub(super) struct RequestDto {
 
 impl RequestDto {
     /// Converts the DTO into a typed shader request.
-    pub(super) fn into_request(self) -> crate::ShaderResult<ShaderProgramRequest> {
+    pub(in crate::compat::ffi) fn into_request(self) -> crate::ShaderResult<ShaderProgramRequest> {
         let mut builder = ShaderProgramRequest::builder(ShaderName::new(self.shader_name)?)
             .target(self.target.unwrap_or_default().into())
-            .cache_strategy(self.cache_strategy.unwrap_or_default().into());
+            .cache_policy(self.cache_policy.unwrap_or_default().into());
 
         for stage in self.stages {
             builder = builder.stage(stage.into_stage_source());
@@ -70,10 +69,10 @@ impl From<TargetDto> for ShaderTarget {
     }
 }
 
-/// Cache strategy DTO.
+/// Cache policy DTO.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
-enum CacheStrategyDto {
+enum CachePolicyDto {
     /// Disabled shader cache.
     #[default]
     Disabled,
@@ -84,11 +83,11 @@ enum CacheStrategyDto {
     },
 }
 
-impl From<CacheStrategyDto> for ShaderCacheStrategy {
-    fn from(strategy: CacheStrategyDto) -> Self {
-        match strategy {
-            CacheStrategyDto::Disabled => Self::Disabled,
-            CacheStrategyDto::Enabled { scene_id } => Self::Enabled { scene_id },
+impl From<CachePolicyDto> for ShaderCachePolicy {
+    fn from(policy: CachePolicyDto) -> Self {
+        match policy {
+            CachePolicyDto::Disabled => Self::Disabled,
+            CachePolicyDto::Enabled { scene_id } => Self::Enabled { scene_id },
         }
     }
 }
@@ -263,14 +262,8 @@ enum PropertyValueDto {
     Number(f32),
     /// Boolean value.
     Bool(bool),
-    /// Two-component vector value.
-    Vec2([f32; 2]),
     /// Three-component vector value.
     Vec3([f32; 3]),
-    /// Four-component vector value.
-    Vec4([f32; 4]),
-    /// Four-by-four matrix value.
-    Matrix4([f32; 16]),
     /// Missing value.
     None,
 }
@@ -281,10 +274,7 @@ impl From<PropertyValueDto> for PropertyValue {
             PropertyValueDto::String(value) => Self::String(value),
             PropertyValueDto::Number(value) => Self::Number(value),
             PropertyValueDto::Bool(value) => Self::Bool(value),
-            PropertyValueDto::Vec2(value) => Self::Vec2(value),
             PropertyValueDto::Vec3(value) => Self::Vec3(value),
-            PropertyValueDto::Vec4(value) => Self::Vec4(value),
-            PropertyValueDto::Matrix4(value) => Self::Matrix4(value),
             PropertyValueDto::None => Self::None,
         }
     }

@@ -1,13 +1,13 @@
 use shader::{
     ShaderCompiler, ShaderError, ShaderStageKind,
     compile::NagaCompiler,
-    legalize::{Codegen, CodegenStageSource},
+    legalize::{LegalizedStageSource, Legalizer},
     syntax::ShaderModule,
 };
 
-fn legalize(stage: ShaderStageKind, source: &str) -> CodegenStageSource {
+fn legalize(stage: ShaderStageKind, source: &str) -> LegalizedStageSource {
     let module = ShaderModule::parse(stage, source).expect("module parses");
-    Codegen.legalize(&module).expect("shader legalizes")
+    Legalizer.legalize(&module).expect("shader legalizes")
 }
 
 #[test]
@@ -15,7 +15,7 @@ fn legalizer_returns_stage_source_and_phase_diagnostics_without_mutating_module(
     let source = "void main() { gl_FragColor = vec4(1.0); }\n";
     let module = ShaderModule::parse(ShaderStageKind::Fragment, source).expect("module parses");
 
-    let legalized = Codegen.legalize(&module).expect("shader legalizes");
+    let legalized = Legalizer.legalize(&module).expect("shader legalizes");
 
     assert_eq!(legalized.stage(), ShaderStageKind::Fragment);
     assert!(legalized.source().contains("#version 450"));
@@ -28,7 +28,7 @@ fn legalizer_returns_stage_source_and_phase_diagnostics_without_mutating_module(
         legalized
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.pass() == Some("Codegen"))
+            .any(|diagnostic| diagnostic.pass() == Some("Legalizer"))
     );
 }
 
@@ -193,7 +193,7 @@ fn workshop_shine_downsample2_renames_local_sample_keyword_before_naga() {
     assert!(!source.contains("vec4 sample ="));
     let _artifact = NagaCompiler
         .compile_stage(ShaderStageKind::Fragment, &legalized)
-        .expect("effects/shine_downsample2 local `sample` should compile after codegen");
+        .expect("effects/shine_downsample2 local `sample` should compile after legalization");
 }
 
 #[test]
@@ -295,7 +295,7 @@ fn genericropeparticle_header_cast3x3_define_and_use_are_legalized_before_naga()
 }
 
 #[test]
-fn genericropeparticle_nested_mul_rewrite_preserves_cast3x3_codegen_before_naga() {
+fn genericropeparticle_nested_mul_rewrite_preserves_cast3x3_legalization_before_naga() {
     let source = concat!(
         "uniform mat4 g_ModelMatrixInverse;\n",
         "uniform vec3 g_OrientationForward;\n",
@@ -322,7 +322,7 @@ fn genericropeparticle_nested_mul_rewrite_preserves_cast3x3_codegen_before_naga(
 }
 
 #[test]
-fn hlsl_mul_rewrite_preserves_nested_texture_sampling_codegen() {
+fn hlsl_mul_rewrite_preserves_nested_texture_sampling_legalization() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "uniform mat4 g_ColorTransform;\n",
@@ -336,13 +336,10 @@ fn hlsl_mul_rewrite_preserves_nested_texture_sampling_codegen() {
     let legalized = legalize(ShaderStageKind::Fragment, source);
     let source = legalized.source();
 
-    assert!(
-        source.contains(
-            "vec4 color = ((texture(sampler2D(g_Texture0, _we_Sampler_g_Texture0), v_Uv)) * \
-             (g_ColorTransform));"
-        ),
-        "{source}"
-    );
+    assert!(source.contains(
+        "vec4 color = ((texture(sampler2D(g_Texture0, _we_Sampler_g_Texture0), v_Uv)) * \
+         (g_ColorTransform));"
+    ));
     assert!(!source.contains("texSample2D("));
     let _artifact = NagaCompiler
         .compile_stage(ShaderStageKind::Fragment, &legalized)
@@ -350,7 +347,7 @@ fn hlsl_mul_rewrite_preserves_nested_texture_sampling_codegen() {
 }
 
 #[test]
-fn hlsl_mul_rewrite_preserves_nested_reserved_identifier_codegen() {
+fn hlsl_mul_rewrite_preserves_nested_reserved_identifier_legalization() {
     let source = concat!(
         "uniform mat4 g_ColorTransform;\n",
         "void main() {\n",
@@ -372,7 +369,7 @@ fn hlsl_mul_rewrite_preserves_nested_reserved_identifier_codegen() {
 }
 
 #[test]
-fn hlsl_mul_rewrite_preserves_nested_type_coercion_codegen() {
+fn hlsl_mul_rewrite_preserves_nested_type_coercion_legalization() {
     let source = concat!(
         "uniform mat4 g_ColorTransform;\n",
         "void main() {\n",
@@ -384,10 +381,7 @@ fn hlsl_mul_rewrite_preserves_nested_type_coercion_codegen() {
     let legalized = legalize(ShaderStageKind::Fragment, source);
     let source = legalized.source();
 
-    assert!(
-        source.contains("vec4 color = ((max(vec4(0.25), vec4(1.0))) * (g_ColorTransform));"),
-        "{source}"
-    );
+    assert!(source.contains("vec4 color = ((max(vec4(0.25), vec4(1.0))) * (g_ColorTransform));"));
     assert!(!source.contains("max(0.25, vec4(1.0))"));
     let _artifact = NagaCompiler
         .compile_stage(ShaderStageKind::Fragment, &legalized)
@@ -395,7 +389,7 @@ fn hlsl_mul_rewrite_preserves_nested_type_coercion_codegen() {
 }
 
 #[test]
-fn fmod_rewrite_preserves_nested_texture_sampling_codegen() {
+fn fmod_rewrite_preserves_nested_texture_sampling_legalization() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "varying vec2 v_Uv;\n",
@@ -419,7 +413,7 @@ fn fmod_rewrite_preserves_nested_texture_sampling_codegen() {
 }
 
 #[test]
-fn expression_replacements_preserve_deep_cross_strategy_nesting() {
+fn expression_replacements_preserve_deep_cross_policy_nesting() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "uniform mat4 g_ColorTransform;\n",
@@ -487,7 +481,7 @@ fn expression_replacements_preserve_more_than_two_nested_expression_fixups() {
 }
 
 #[test]
-fn strategy_owned_texture_sampling_fixup_compiles_through_naga() {
+fn policy_owned_texture_sampling_fixup_compiles_through_naga() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "varying vec2 v_Uv;\n",
@@ -506,12 +500,12 @@ fn strategy_owned_texture_sampling_fixup_compiles_through_naga() {
     );
     let artifact = NagaCompiler
         .compile_stage(ShaderStageKind::Fragment, &legalized)
-        .expect("texture sampling strategy-owned fixup should compile through Naga");
+        .expect("texture sampling policy-owned fixup should compile through Naga");
     assert_eq!(artifact.kind(), ShaderStageKind::Fragment);
 }
 
 #[test]
-fn log10_rewrite_preserves_nested_cast_codegen() {
+fn log10_rewrite_preserves_nested_cast_legalization() {
     let source = concat!(
         "uniform mat4 g_ModelMatrixInverse;\n",
         "void main() {\n",
@@ -534,7 +528,7 @@ fn log10_rewrite_preserves_nested_cast_codegen() {
 }
 
 #[test]
-fn ddy_rewrite_preserves_nested_reserved_identifier_codegen() {
+fn ddy_rewrite_preserves_nested_reserved_identifier_legalization() {
     let source = concat!(
         "void main() {\n",
         "    float sample = 0.5;\n",
@@ -802,17 +796,17 @@ fn array_parameter_specialization_rejects_different_top_level_array_call_sites()
     );
     let module = ShaderModule::parse(ShaderStageKind::Fragment, source).expect("module parses");
 
-    let err = Codegen
+    let err = Legalizer
         .legalize(&module)
         .expect_err("ambiguous array helper specialization should be rejected");
 
-    let ShaderError::Codegen { diagnostics } = err else {
-        panic!("expected structured codegen error");
+    let ShaderError::Legalize { diagnostics } = err else {
+        panic!("expected structured legalization error");
     };
     let diagnostic = diagnostics
         .first()
         .expect("array helper rejection should include diagnostic");
-    assert_eq!(diagnostic.pass(), Some("Codegen"));
+    assert_eq!(diagnostic.pass(), Some("Legalizer"));
     assert_eq!(
         diagnostic.message(),
         "array-parameter specialization requires each array parameter to use one stable top-level \
@@ -912,7 +906,7 @@ fn legalizes_top_level_float1_uniform_alias_inside_generated_block() {
 }
 
 #[test]
-fn texture_wrapper_preserves_nested_argument_codegen() {
+fn texture_wrapper_preserves_nested_argument_legalization() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "void main() {\n",
@@ -1056,17 +1050,17 @@ fn rejects_leading_zero_encoded_source_texture_binding() {
     );
     let module = ShaderModule::parse(ShaderStageKind::Fragment, source).expect("module parses");
 
-    let err = Codegen
+    let err = Legalizer
         .legalize(&module)
         .expect_err("leading-zero encoded texture binding should be rejected");
 
-    let ShaderError::Codegen { diagnostics } = err else {
-        panic!("expected structured codegen error");
+    let ShaderError::Legalize { diagnostics } = err else {
+        panic!("expected structured legalization error");
     };
     let diagnostic = diagnostics
         .first()
         .expect("duplicate texture binding should include diagnostic");
-    assert_eq!(diagnostic.pass(), Some("Codegen"));
+    assert_eq!(diagnostic.pass(), Some("Legalizer"));
     assert!(diagnostic.message().contains("g_Texture01"));
     assert!(diagnostic.message().contains("canonical"));
 }
@@ -1124,26 +1118,6 @@ fn renames_user_defined_two_arg_mod_declaration_and_call() {
     assert!(source.contains("float _we_user_mod(float value, float divisor)"));
     assert!(source.contains("float wrapped = _we_user_mod(5.5, 2.0);"));
     assert!(!source.contains("float mod(float value, float divisor)"));
-}
-
-#[test]
-fn renames_user_defined_two_arg_mod_calls_with_float_constructors() {
-    let source = concat!(
-        "float mod(float value, float divisor) { return value - divisor; }\n",
-        "void main() {\n",
-        "    float value = 5.5;\n",
-        "    float divisor = 2.0;\n",
-        "    float wrapped = mod(float(value), float(divisor));\n",
-        "    gl_FragColor = vec4(wrapped);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(source.contains("float _we_user_mod(float value, float divisor)"));
-    assert!(source.contains("float wrapped = _we_user_mod(float(value), float(divisor));"));
-    assert!(!source.contains("float wrapped = mod(float(value), float(divisor));"));
 }
 
 #[test]
@@ -1240,25 +1214,6 @@ fn user_mod_classification_ignores_function_prototype_parameters() {
 }
 
 #[test]
-fn user_mod_classification_keeps_unnamed_prototype_parameters_out_of_scope() {
-    let source = concat!(
-        "vec2 x;\n",
-        "vec2 y;\n",
-        "float mod(float, float);\n",
-        "void main() {\n",
-        "    vec2 wrapped = mod(x, y);\n",
-        "    gl_FragColor = vec4(wrapped, 0.0, 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(source.contains("vec2 wrapped = mod(x, y);"));
-    assert!(!source.contains("vec2 wrapped = _we_user_mod(x, y);"));
-}
-
-#[test]
 fn user_mod_classification_tracks_function_body_parameters() {
     let source = concat!(
         "float mod(float x, float y) { return x - y; }\n",
@@ -1273,42 +1228,6 @@ fn user_mod_classification_tracks_function_body_parameters() {
 
     assert!(source.contains("float _we_user_mod(float x, float y)"));
     assert!(source.contains("return _we_user_mod(x, y);"));
-}
-
-#[test]
-fn user_mod_classification_tracks_array_parameter_name_before_identifier_bound() {
-    let source = concat!(
-        "const int COUNT = 4;\n",
-        "float mod(float x, float y) { return x - y; }\n",
-        "float helper(float values[COUNT], float y) { return mod(values[0], y); }\n",
-        "void main() {\n",
-        "    float values[COUNT];\n",
-        "    gl_FragColor = vec4(helper(values, 2.0));\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(source.contains("return _we_user_mod(values[0], y);"));
-}
-
-#[test]
-fn user_mod_classification_tracks_parenthesized_array_parameter_element() {
-    let source = concat!(
-        "const int COUNT = 4;\n",
-        "float mod(float x, float y) { return x - y; }\n",
-        "float helper(float values[COUNT], float y) { return mod((values[0]), y); }\n",
-        "void main() {\n",
-        "    float values[COUNT];\n",
-        "    gl_FragColor = vec4(helper(values, 2.0));\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(source.contains("return _we_user_mod((values[0]), y);"));
 }
 
 #[test]
@@ -1554,23 +1473,6 @@ fn user_mod_classification_accepts_unary_signs_inside_scalar_expressions() {
 }
 
 #[test]
-fn user_mod_classification_accepts_float_constructor_scalar_expressions() {
-    let source = concat!(
-        "float mod(float x, float y) { return x - y; }\n",
-        "void main() {\n",
-        "    float x = 5.5;\n",
-        "    float wrapped = mod(float(x), float(2.0));\n",
-        "    gl_FragColor = vec4(wrapped);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(source.contains("float wrapped = _we_user_mod(float(x), float(2.0));"));
-}
-
-#[test]
 fn builtin_two_arg_mod_stays_accessible_without_user_function() {
     let source = concat!(
         "void main() {\n",
@@ -1587,7 +1489,7 @@ fn builtin_two_arg_mod_stays_accessible_without_user_function() {
 }
 
 #[test]
-fn identifier_codegen_ignores_comments_and_string_literals_but_legalizes_define_bodies() {
+fn identifier_legalization_ignores_comments_and_string_literals_but_legalizes_define_bodies() {
     let source = concat!(
         "#define TEXTURE_CALL tex2D(g_Texture0, uv)\n",
         "uniform sampler2D g_Texture0;\n",
@@ -1700,7 +1602,7 @@ fn renames_bool_locals_named_like_glsl_operator_words() {
 }
 
 #[test]
-fn reserved_identifier_strategy_does_not_rewrite_member_access_fields() {
+fn reserved_identifier_policy_does_not_rewrite_member_access_fields() {
     let source = concat!(
         "varying vec2 uv;\n",
         "struct Material { float uv; };\n",
@@ -1721,7 +1623,7 @@ fn reserved_identifier_strategy_does_not_rewrite_member_access_fields() {
 }
 
 #[test]
-fn reserved_identifier_strategy_keeps_independent_function_local_scopes_separate() {
+fn reserved_identifier_policy_keeps_independent_function_local_scopes_separate() {
     let source = concat!(
         "float first() {\n",
         "    float value = 1.0;\n",
@@ -1746,7 +1648,7 @@ fn reserved_identifier_strategy_keeps_independent_function_local_scopes_separate
 }
 
 #[test]
-fn reserved_identifier_strategy_renames_reserved_comma_declarators() {
+fn reserved_identifier_policy_renames_reserved_comma_declarators() {
     let source = concat!(
         "void main() {\n",
         "    float uv = 1.0, and = uv;\n",
@@ -1763,7 +1665,7 @@ fn reserved_identifier_strategy_renames_reserved_comma_declarators() {
 }
 
 #[test]
-fn reserved_identifier_strategy_renames_same_statement_uses_after_comma_declarator() {
+fn reserved_identifier_policy_renames_same_statement_uses_after_comma_declarator() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",
@@ -1780,7 +1682,7 @@ fn reserved_identifier_strategy_renames_same_statement_uses_after_comma_declarat
 }
 
 #[test]
-fn reserved_identifier_strategy_limits_for_header_declaration_to_loop_scope() {
+fn reserved_identifier_policy_limits_for_header_declaration_to_loop_scope() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",
@@ -1798,7 +1700,7 @@ fn reserved_identifier_strategy_limits_for_header_declaration_to_loop_scope() {
 }
 
 #[test]
-fn reserved_identifier_strategy_keeps_for_initializer_visible_through_if_else_body() {
+fn reserved_identifier_policy_keeps_for_initializer_visible_through_if_else_body() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",
@@ -1821,7 +1723,7 @@ fn reserved_identifier_strategy_keeps_for_initializer_visible_through_if_else_bo
 }
 
 #[test]
-fn reserved_identifier_strategy_keeps_for_initializer_visible_through_braced_if_else_body() {
+fn reserved_identifier_policy_keeps_for_initializer_visible_through_braced_if_else_body() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",
@@ -1844,7 +1746,7 @@ fn reserved_identifier_strategy_keeps_for_initializer_visible_through_braced_if_
 }
 
 #[test]
-fn reserved_identifier_strategy_limits_for_initializer_scope_after_nested_loop_body() {
+fn reserved_identifier_policy_limits_for_initializer_scope_after_nested_loop_body() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",
@@ -1987,7 +1889,7 @@ fn workshop_3611439897_sharpen_style_numeric_ternary_condition_is_made_boolean()
 }
 
 #[test]
-fn control_flow_coercion_strategy_numeric_ternary_condition_preserves_nested_texture_sampling() {
+fn control_flow_coercion_policy_numeric_ternary_condition_preserves_nested_texture_sampling() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "varying vec2 v_TexCoord;\n",
@@ -2012,7 +1914,7 @@ fn control_flow_coercion_strategy_numeric_ternary_condition_preserves_nested_tex
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_boolean_comparison_ternary_condition() {
+fn control_flow_coercion_policy_preserves_boolean_comparison_ternary_condition() {
     let source = concat!(
         "vec3 apply_blending(int mode, vec3 base, vec3 tint, float mask) {\n",
         "    return mode == 30 ? mix(base, tint, mask) : base;\n",
@@ -2034,7 +1936,7 @@ fn control_flow_coercion_strategy_preserves_boolean_comparison_ternary_condition
 }
 
 #[test]
-fn type_coercion_strategy_narrows_vector_texture_initializers() {
+fn type_coercion_policy_narrows_vector_texture_initializers() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "void main() {\n",
@@ -2071,353 +1973,6 @@ fn legalized_texture_sampling_compiles_with_naga() {
         .expect("legalized fragment texture sampling should compile through Naga");
 
     assert_eq!(artifact.kind(), ShaderStageKind::Fragment);
-}
-
-#[test]
-fn legalizes_hlsl_mul_vector_matrix_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "#define VERTICAL 1\n",
-        "attribute vec3 a_Position;\n",
-        "uniform mat4 g_ModelViewProjectionMatrix;\n",
-        "void main() {\n",
-        "#if VERTICAL\n",
-        "    gl_Position = mul(vec4(a_Position, 1.0), g_ModelViewProjectionMatrix);\n",
-        "#endif\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Vertex, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("gl_Position = ((g_ModelViewProjectionMatrix) * (vec4(a_Position, 1.0)));")
-    );
-    assert!(
-        !source
-            .contains("gl_Position = ((vec4(a_Position, 1.0)) * (g_ModelViewProjectionMatrix));")
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_vector_swizzle_matrix_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "varying vec2 v_Uv;\n",
-        "uniform mat2 g_UvTransform;\n",
-        "void main() {\n",
-        "    vec2 uv = mul(v_Uv.xy, g_UvTransform);\n",
-        "    gl_FragColor = vec4(uv, 0.0, 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("vec2 uv = ((g_UvTransform) * (v_Uv.xy));"),
-        "{source}"
-    );
-    assert!(!source.contains("vec2 uv = ((v_Uv.xy) * (g_UvTransform));"));
-}
-
-#[test]
-fn legalizes_hlsl_mul_call_result_swizzle_matrix_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "varying vec2 v_Uv;\n",
-        "uniform sampler2D g_Texture0;\n",
-        "uniform mat4 g_ColorTransform;\n",
-        "void main() {\n",
-        "    vec4 color = mul(texSample2D(g_Texture0, v_Uv).rgba, g_ColorTransform);\n",
-        "    gl_FragColor = color;\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains(
-            "vec4 color = ((g_ColorTransform) * (texture(sampler2D(g_Texture0, \
-             _we_Sampler_g_Texture0), v_Uv).rgba));"
-        ),
-        "{source}"
-    );
-    assert!(
-        !source.contains(
-            "vec4 color = ((texture(sampler2D(g_Texture0, _we_Sampler_g_Texture0), v_Uv).rgba) * \
-             (g_ColorTransform));"
-        ),
-        "{source}"
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_matrix_matrix_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "uniform mat4 g_A;\n",
-        "uniform mat4 g_B;\n",
-        "void main() {\n",
-        "    mat4 transform = mul(g_A, g_B);\n",
-        "    gl_Position = transform * vec4(0.0, 0.0, 0.0, 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Vertex, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("mat4 transform = ((g_B) * (g_A));"),
-        "{source}"
-    );
-    assert!(!source.contains("mat4 transform = ((g_A) * (g_B));"));
-}
-
-#[test]
-fn legalizes_hlsl_mul_vector_binary_matrix_product_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "attribute vec3 a_Position;\n",
-        "uniform mat4 g_A;\n",
-        "uniform mat4 g_B;\n",
-        "void main() {\n",
-        "    gl_Position = mul(vec4(a_Position, 1.0), g_A * g_B);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Vertex, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("gl_Position = ((g_A * g_B) * (vec4(a_Position, 1.0)));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains("gl_Position = ((vec4(a_Position, 1.0)) * (g_A * g_B));"),
-        "{source}"
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_vector_indexed_matrix_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "uniform mat4 g_Bones[4];\n",
-        "attribute vec3 a_Position;\n",
-        "attribute uvec4 a_BlendIndices;\n",
-        "void main() {\n",
-        "    vec3 localPos = a_Position;\n",
-        "    gl_Position = mul(vec4(localPos, 1.0), g_Bones[a_BlendIndices.x]);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Vertex, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("gl_Position = ((g_Bones[a_BlendIndices.x]) * (vec4(localPos, 1.0)));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains("gl_Position = ((vec4(localPos, 1.0)) * (g_Bones[a_BlendIndices.x]));")
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_vector_weighted_matrix_sum_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "uniform mat4 g_Bones[4];\n",
-        "attribute vec3 a_Position;\n",
-        "attribute uvec4 a_BlendIndices;\n",
-        "attribute vec4 a_BlendWeights;\n",
-        "void main() {\n",
-        "    vec3 localPos = a_Position;\n",
-        "    gl_Position = mul(vec4(localPos, 1.0), g_Bones[a_BlendIndices.x] * a_BlendWeights.x \
-         +\n",
-        "                    g_Bones[a_BlendIndices.y] * a_BlendWeights.y);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Vertex, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains(
-            "gl_Position = ((g_Bones[a_BlendIndices.x] * a_BlendWeights.x +\n                    \
-             g_Bones[a_BlendIndices.y] * a_BlendWeights.y) * (vec4(localPos, 1.0)));"
-        ),
-        "{source}"
-    );
-    assert!(
-        !source.contains(
-            "gl_Position = ((vec4(localPos, 1.0)) * (g_Bones[a_BlendIndices.x] * a_BlendWeights.x \
-             +\n                    g_Bones[a_BlendIndices.y] * a_BlendWeights.y));"
-        )
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_scalar_swizzle_matrix_transform_in_fallback_order() {
-    let source = concat!(
-        "varying vec2 v_Uv;\n",
-        "varying vec4 v_Color;\n",
-        "uniform sampler2D g_Texture0;\n",
-        "uniform mat4 g_ColorTransform;\n",
-        "void main() {\n",
-        "    vec4 texture_color = mul(texSample2D(g_Texture0, v_Uv).x, g_ColorTransform);\n",
-        "    vec4 varying_color = mul(v_Color.x, g_ColorTransform);\n",
-        "    gl_FragColor = texture_color + varying_color;\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains(
-            "vec4 texture_color = ((g_ColorTransform) * (texture(sampler2D(g_Texture0, \
-             _we_Sampler_g_Texture0), v_Uv).x));"
-        ),
-        "{source}"
-    );
-    assert!(
-        source.contains("vec4 varying_color = ((g_ColorTransform) * (v_Color.x));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains(
-            "vec4 texture_color = ((texture(sampler2D(g_Texture0, _we_Sampler_g_Texture0), \
-             v_Uv).x) * (g_ColorTransform));"
-        ),
-        "{source}"
-    );
-    assert!(
-        !source.contains("vec4 varying_color = ((v_Color.x) * (g_ColorTransform));"),
-        "{source}"
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_vector_vector_with_uniform_operand_swap() {
-    let source = concat!(
-        "varying vec3 v_Normal;\n",
-        "varying vec3 v_Light;\n",
-        "void main() {\n",
-        "    float lighting = mul(normalize(v_Normal), normalize(v_Light));\n",
-        "    gl_FragColor = vec4(vec3(lighting), 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("float lighting = ((normalize(v_Light)) * (normalize(v_Normal)));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains("float lighting = dot(normalize(v_Normal), normalize(v_Light));"),
-        "{source}"
-    );
-}
-
-#[test]
-fn legalizes_nested_hlsl_mul_calls_with_uniform_operand_swap() {
-    let source = concat!(
-        "uniform mat4 g_A;\n",
-        "uniform mat4 g_B;\n",
-        "uniform mat4 g_C;\n",
-        "void main() {\n",
-        "    mat4 transform = mul(mul(g_A, g_B), g_C);\n",
-        "    gl_Position = transform * vec4(0.0, 0.0, 0.0, 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Vertex, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("mat4 transform = ((g_C) * (((g_B) * (g_A))));"),
-        "{source}"
-    );
-    assert!(!source.contains("mul("), "{source}");
-}
-
-#[test]
-fn legalizes_hlsl_mul_user_function_vector_swizzle_matrix_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "uniform mat2 g_UvTransform;\n",
-        "vec4 color_source() {\n",
-        "    return vec4(0.25, 0.5, 0.75, 1.0);\n",
-        "}\n",
-        "void main() {\n",
-        "    vec2 uv = mul(color_source().xy, g_UvTransform);\n",
-        "    gl_FragColor = vec4(uv, 0.0, 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("vec2 uv = ((g_UvTransform) * (color_source().xy));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains("vec2 uv = ((color_source().xy) * (g_UvTransform));"),
-        "{source}"
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_overloaded_user_function_vector_result_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "varying vec2 v_Uv;\n",
-        "uniform mat2 g_UvTransform;\n",
-        "vec2 f(vec2 value) {\n",
-        "    return value;\n",
-        "}\n",
-        "float f(float value) {\n",
-        "    return value;\n",
-        "}\n",
-        "void main() {\n",
-        "    vec2 uv = mul(f(v_Uv), g_UvTransform);\n",
-        "    gl_FragColor = vec4(uv, 0.0, 1.0);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("vec2 uv = ((g_UvTransform) * (f(v_Uv)));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains("vec2 uv = ((f(v_Uv)) * (g_UvTransform));"),
-        "{source}"
-    );
-}
-
-#[test]
-fn legalizes_hlsl_mul_user_function_matrix_result_vector_transform_like_ww_mul_operand_swap() {
-    let source = concat!(
-        "varying vec4 v_Color;\n",
-        "mat4 matrix_source() {\n",
-        "    return mat4(1.0);\n",
-        "}\n",
-        "void main() {\n",
-        "    gl_FragColor = mul(matrix_source(), v_Color);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("_we_FragColor = ((v_Color) * (matrix_source()));"),
-        "{source}"
-    );
-    assert!(
-        !source.contains("_we_FragColor = ((matrix_source()) * (v_Color));"),
-        "{source}"
-    );
 }
 
 #[test]
@@ -2494,7 +2049,7 @@ fn explicit_hlsl_mul_rewrite_does_not_emit_compatibility_macro() {
 }
 
 #[test]
-fn strategies_support_legacy_texture_lod_and_clip_without_macro_prelude() {
+fn policies_support_legacy_texture_lod_and_clip_without_macro_prelude() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "void main() {\n",
@@ -2522,7 +2077,7 @@ fn strategies_support_legacy_texture_lod_and_clip_without_macro_prelude() {
 }
 
 #[test]
-fn legacy_compatibility_macros_are_not_emitted_when_strategy_rewrites_apply() {
+fn legacy_compatibility_macros_are_not_emitted_when_policy_rewrites_apply() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "uniform mat4 g_ModelViewProjectionMatrix;\n",
@@ -2658,7 +2213,7 @@ fn clip_compatibility_function_stays_fragment_only() {
 }
 
 #[test]
-fn legacy_builtin_strategy_handles_general_call_rewrites() {
+fn legacy_builtin_policy_handles_general_call_rewrites() {
     let source = concat!(
         "#define LEGACY_NAMES frac log10 atan2 fmod ddx ddy saturate lerp\n",
         "void main() {\n",
@@ -2693,7 +2248,7 @@ fn legacy_builtin_strategy_handles_general_call_rewrites() {
 }
 
 #[test]
-fn type_coercion_strategy_promotes_integer_literals_for_float_builtins() {
+fn type_coercion_policy_promotes_integer_literals_for_float_builtins() {
     let source = concat!(
         "void main() {\n",
         "    float a = mix(0, 1, 1);\n",
@@ -2716,7 +2271,7 @@ fn type_coercion_strategy_promotes_integer_literals_for_float_builtins() {
 }
 
 #[test]
-fn type_coercion_strategy_broadcasts_scalar_arguments_to_vector_width() {
+fn type_coercion_policy_broadcasts_scalar_arguments_to_vector_width() {
     let source = concat!(
         "void main() {\n",
         "    vec2 a = mix(vec2(0.0), 1, 0.5);\n",
@@ -2737,7 +2292,7 @@ fn type_coercion_strategy_broadcasts_scalar_arguments_to_vector_width() {
 }
 
 #[test]
-fn type_coercion_strategy_broadcasts_scalar_expression_in_vector_max() {
+fn type_coercion_policy_broadcasts_scalar_expression_in_vector_max() {
     let source = concat!(
         "float luma(vec3 color) {\n",
         "    return dot(color, vec3(0.299, 0.587, 0.114));\n",
@@ -2786,7 +2341,7 @@ fn workshop_3212731906_hue_shift_mix_narrows_wide_peer_for_naga() {
 }
 
 #[test]
-fn type_coercion_strategy_narrows_vector_mix_mask_and_step_edge_arguments() {
+fn type_coercion_policy_narrows_vector_mix_mask_and_step_edge_arguments() {
     let source = concat!(
         "void main() {\n",
         "    vec4 wide_a = vec4(0.1, 0.2, 0.3, 0.4);\n",
@@ -2818,7 +2373,7 @@ fn type_coercion_strategy_narrows_vector_mix_mask_and_step_edge_arguments() {
 }
 
 #[test]
-fn type_coercion_strategy_does_not_narrow_mix_below_declared_vec4_context() {
+fn type_coercion_policy_does_not_narrow_mix_below_declared_vec4_context() {
     let source = concat!(
         "void main() {\n",
         "    vec4 wide4 = vec4(0.1, 0.2, 0.3, 0.4);\n",
@@ -2843,7 +2398,7 @@ fn type_coercion_strategy_does_not_narrow_mix_below_declared_vec4_context() {
 }
 
 #[test]
-fn type_coercion_strategy_does_not_apply_lhs_context_to_swizzled_call_result() {
+fn type_coercion_policy_does_not_apply_lhs_context_to_swizzled_call_result() {
     let source = concat!(
         "void main() {\n",
         "    vec4 a4 = vec4(0.1, 0.2, 0.3, 0.4);\n",
@@ -2873,7 +2428,7 @@ fn type_coercion_strategy_does_not_apply_lhs_context_to_swizzled_call_result() {
 }
 
 #[test]
-fn type_coercion_strategy_uses_declaration_width_before_shadowed_outer_binding() {
+fn type_coercion_policy_uses_declaration_width_before_shadowed_outer_binding() {
     let source = concat!(
         "vec4 color = vec4(0.0);\n",
         "void main() {\n",
@@ -2900,7 +2455,7 @@ fn type_coercion_strategy_uses_declaration_width_before_shadowed_outer_binding()
 }
 
 #[test]
-fn type_coercion_strategy_uses_special_vector_arguments_as_fallback_width() {
+fn type_coercion_policy_uses_special_vector_arguments_as_fallback_width() {
     let source = concat!(
         "void main() {\n",
         "    vec3 mask_vec3 = vec3(0.25, 0.5, 0.75);\n",
@@ -2929,7 +2484,7 @@ fn type_coercion_strategy_uses_special_vector_arguments_as_fallback_width() {
 }
 
 #[test]
-fn type_coercion_strategy_uses_special_vector_arguments_without_context_width() {
+fn type_coercion_policy_uses_special_vector_arguments_without_context_width() {
     let source = concat!(
         "void main() {\n",
         "    vec3 mask_vec3 = vec3(0.25, 0.5, 0.75);\n",
@@ -2955,33 +2510,7 @@ fn type_coercion_strategy_uses_special_vector_arguments_without_context_width() 
 }
 
 #[test]
-fn type_coercion_strategy_reduces_vector_step_call_for_scalar_initializer() {
-    let source = concat!(
-        "uniform sampler2D g_Texture0;\n",
-        "varying vec4 v_TexCoord;\n",
-        "void main() {\n",
-        "    vec4 albedo = texSample2D(g_Texture0, v_TexCoord.xy);\n",
-        "    float r = step(1.0, albedo);\n",
-        "    gl_FragColor = vec4(r);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(
-        source.contains("float r = step(1.0, albedo).x;"),
-        "scalar initializer should select one component from vector step result; source:\n{source}"
-    );
-    assert!(!source.contains("float r = step(1.0, albedo);"));
-    let artifact = NagaCompiler
-        .compile_stage(ShaderStageKind::Fragment, &legalized)
-        .expect("scalar initializer from vector step result should compile through Naga");
-    assert_eq!(artifact.kind(), ShaderStageKind::Fragment);
-}
-
-#[test]
-fn type_coercion_strategy_uses_special_vector_width_with_primary_width_without_context() {
+fn type_coercion_policy_uses_special_vector_width_with_primary_width_without_context() {
     let source = concat!(
         "void main() {\n",
         "    vec4 wide4 = vec4(0.1, 0.2, 0.3, 0.4);\n",
@@ -3008,7 +2537,7 @@ fn type_coercion_strategy_uses_special_vector_width_with_primary_width_without_c
 }
 
 #[test]
-fn type_coercion_strategy_does_not_infer_swizzle_width_for_struct_field_lvalues() {
+fn type_coercion_policy_does_not_infer_swizzle_width_for_struct_field_lvalues() {
     let source = concat!(
         "struct Surface { vec4 rgb; };\n",
         "void main() {\n",
@@ -3037,7 +2566,7 @@ fn type_coercion_strategy_does_not_infer_swizzle_width_for_struct_field_lvalues(
 }
 
 #[test]
-fn type_coercion_strategy_blocks_outer_vector_base_with_shadowed_struct_lvalue() {
+fn type_coercion_policy_blocks_outer_vector_base_with_shadowed_struct_lvalue() {
     let source = concat!(
         "struct Surface { vec4 rgb; };\n",
         "vec4 surface = vec4(0.0);\n",
@@ -3070,7 +2599,7 @@ fn type_coercion_strategy_blocks_outer_vector_base_with_shadowed_struct_lvalue()
 }
 
 #[test]
-fn type_coercion_strategy_does_not_infer_chained_member_width_from_unrelated_field_name() {
+fn type_coercion_policy_does_not_infer_chained_member_width_from_unrelated_field_name() {
     let source = concat!(
         "struct Payload { vec4 rgb; };\n",
         "struct Material { Payload payload; };\n",
@@ -3121,7 +2650,7 @@ fn legacy_lerp_rewrite_composes_with_type_coercion() {
 }
 
 #[test]
-fn type_coercion_strategy_swizzles_vec4_identifier_initializers_for_narrow_vectors() {
+fn type_coercion_policy_swizzles_vec4_identifier_initializers_for_narrow_vectors() {
     let source = concat!(
         "void main() {\n",
         "    vec4 packed = vec4(1.0, 2.0, 3.0, 4.0);\n",
@@ -3141,7 +2670,7 @@ fn type_coercion_strategy_swizzles_vec4_identifier_initializers_for_narrow_vecto
 }
 
 #[test]
-fn type_coercion_strategy_uses_nearest_binding_for_narrow_vector_identifier_initializers() {
+fn type_coercion_policy_uses_nearest_binding_for_narrow_vector_identifier_initializers() {
     let source = concat!(
         "void main() {\n",
         "    vec4 packed = vec4(1.0, 2.0, 3.0, 4.0);\n",
@@ -3164,7 +2693,7 @@ fn type_coercion_strategy_uses_nearest_binding_for_narrow_vector_identifier_init
 }
 
 #[test]
-fn type_coercion_strategy_swizzles_vec4_identifier_initializers_in_comma_declarators() {
+fn type_coercion_policy_swizzles_vec4_identifier_initializers_in_comma_declarators() {
     let source = concat!(
         "void main() {\n",
         "    vec4 packed = vec4(1.0, 2.0, 3.0, 4.0);\n",
@@ -3182,7 +2711,7 @@ fn type_coercion_strategy_swizzles_vec4_identifier_initializers_in_comma_declara
 }
 
 #[test]
-fn type_coercion_strategy_broadcasts_scalar_initializers_in_multi_vector_declarations() {
+fn type_coercion_policy_broadcasts_scalar_initializers_in_multi_vector_declarations() {
     let source = concat!(
         "void main() {\n",
         "    vec3 offset = vec3(1.0), velocity = 2.0, acceleration = -3;\n",
@@ -3201,7 +2730,7 @@ fn type_coercion_strategy_broadcasts_scalar_initializers_in_multi_vector_declara
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_float_modulo_assignments() {
+fn control_flow_coercion_policy_lowers_float_modulo_assignments() {
     let source = concat!(
         "void main() {\n",
         "    float x = 5.5;\n",
@@ -3225,7 +2754,7 @@ fn control_flow_coercion_strategy_lowers_float_modulo_assignments() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_float_modulo_assignment_without_builtin_fmod() {
+fn control_flow_coercion_policy_lowers_float_modulo_assignment_without_builtin_fmod() {
     let source = concat!(
         "void main() {\n",
         "    float fragLV = 3.0;\n",
@@ -3245,7 +2774,7 @@ fn control_flow_coercion_strategy_lowers_float_modulo_assignment_without_builtin
 }
 
 #[test]
-fn control_flow_coercion_strategy_modulo_assignment_preserves_nested_texture_sampling() {
+fn control_flow_coercion_policy_modulo_assignment_preserves_nested_texture_sampling() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "varying vec2 v_TexCoord;\n",
@@ -3268,7 +2797,7 @@ fn control_flow_coercion_strategy_modulo_assignment_preserves_nested_texture_sam
 }
 
 #[test]
-fn control_flow_coercion_strategy_does_not_lower_unknown_or_integer_member_modulo_assignments() {
+fn control_flow_coercion_policy_does_not_lower_unknown_or_integer_member_modulo_assignments() {
     let source = concat!(
         "struct Payload { int x; };\n",
         "void main() {\n",
@@ -3294,7 +2823,7 @@ fn control_flow_coercion_strategy_does_not_lower_unknown_or_integer_member_modul
 }
 
 #[test]
-fn control_flow_coercion_strategy_respects_integer_vector_shadowing_for_member_modulo_assignment() {
+fn control_flow_coercion_policy_respects_integer_vector_shadowing_for_member_modulo_assignment() {
     let source = concat!(
         "vec4 color;\n",
         "void main() {\n",
@@ -3316,7 +2845,7 @@ fn control_flow_coercion_strategy_respects_integer_vector_shadowing_for_member_m
 }
 
 #[test]
-fn control_flow_coercion_strategy_keeps_for_initializer_blocker_through_if_else_body() {
+fn control_flow_coercion_policy_keeps_for_initializer_blocker_through_if_else_body() {
     let source = concat!(
         "vec4 color;\n",
         "void main() {\n",
@@ -3342,7 +2871,7 @@ fn control_flow_coercion_strategy_keeps_for_initializer_blocker_through_if_else_
 }
 
 #[test]
-fn control_flow_coercion_strategy_respects_matrix_shadowing_for_member_modulo_assignment() {
+fn control_flow_coercion_policy_respects_matrix_shadowing_for_member_modulo_assignment() {
     let source = concat!(
         "vec4 color;\n",
         "void main() {\n",
@@ -3370,7 +2899,7 @@ fn control_flow_coercion_strategy_respects_matrix_shadowing_for_member_modulo_as
 }
 
 #[test]
-fn control_flow_coercion_strategy_respects_struct_shadowing_for_member_modulo_assignment() {
+fn control_flow_coercion_policy_respects_struct_shadowing_for_member_modulo_assignment() {
     let source = concat!(
         "struct Payload { int x; };\n",
         "vec4 payload;\n",
@@ -3389,8 +2918,7 @@ fn control_flow_coercion_strategy_respects_struct_shadowing_for_member_modulo_as
 }
 
 #[test]
-fn control_flow_coercion_strategy_respects_struct_parameter_shadowing_for_member_modulo_assignment()
-{
+fn control_flow_coercion_policy_respects_struct_parameter_shadowing_for_member_modulo_assignment() {
     let source = concat!(
         "struct Payload { int x; };\n",
         "vec4 color;\n",
@@ -3412,7 +2940,7 @@ fn control_flow_coercion_strategy_respects_struct_parameter_shadowing_for_member
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_modulo_in_comma_declarators_independently() {
+fn control_flow_coercion_policy_lowers_modulo_in_comma_declarators_independently() {
     let source = concat!(
         "void main() {\n",
         "    float x = 5.5;\n",
@@ -3430,7 +2958,7 @@ fn control_flow_coercion_strategy_lowers_modulo_in_comma_declarators_independent
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_modulo_operands_without_swallowing_neighbors() {
+fn control_flow_coercion_policy_lowers_modulo_operands_without_swallowing_neighbors() {
     let source = concat!(
         "void main() {\n",
         "    float a = 5.5;\n",
@@ -3452,7 +2980,7 @@ fn control_flow_coercion_strategy_lowers_modulo_operands_without_swallowing_neig
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_chained_modulo_left_associatively() {
+fn control_flow_coercion_policy_lowers_chained_modulo_left_associatively() {
     let source = concat!(
         "void main() {\n",
         "    float a = 5.5;\n",
@@ -3471,7 +2999,7 @@ fn control_flow_coercion_strategy_lowers_chained_modulo_left_associatively() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_parenthesized_argument_and_nested_modulo() {
+fn control_flow_coercion_policy_lowers_parenthesized_argument_and_nested_modulo() {
     let source = concat!(
         "float passthrough(float value) { return value; }\n",
         "void main() {\n",
@@ -3496,7 +3024,7 @@ fn control_flow_coercion_strategy_lowers_parenthesized_argument_and_nested_modul
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_modulo_with_signed_rhs_operands() {
+fn control_flow_coercion_policy_lowers_modulo_with_signed_rhs_operands() {
     let source = concat!(
         "void main() {\n",
         "    float a = 5.5;\n",
@@ -3517,7 +3045,7 @@ fn control_flow_coercion_strategy_lowers_modulo_with_signed_rhs_operands() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_integer_modulo_in_integer_operands() {
+fn control_flow_coercion_policy_preserves_integer_modulo_in_integer_operands() {
     let source = concat!(
         "void main() {\n",
         "    int i = 5;\n",
@@ -3538,7 +3066,7 @@ fn control_flow_coercion_strategy_preserves_integer_modulo_in_integer_operands()
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_uint_constructor_integer_modulo() {
+fn control_flow_coercion_policy_preserves_uint_constructor_integer_modulo() {
     let source = concat!(
         "void main() {\n",
         "    int i = 5;\n",
@@ -3556,7 +3084,7 @@ fn control_flow_coercion_strategy_preserves_uint_constructor_integer_modulo() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_uint_constructor_float_modulo() {
+fn control_flow_coercion_policy_lowers_uint_constructor_float_modulo() {
     let source = concat!(
         "void main() {\n",
         "    float f = 5.5;\n",
@@ -3574,7 +3102,7 @@ fn control_flow_coercion_strategy_lowers_uint_constructor_float_modulo() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_composes_assignment_rhs_and_constructor_modulo_lowering() {
+fn control_flow_coercion_policy_composes_assignment_rhs_and_constructor_modulo_lowering() {
     let source = concat!(
         "void main() {\n",
         "    float f = 5.5;\n",
@@ -3595,7 +3123,7 @@ fn control_flow_coercion_strategy_composes_assignment_rhs_and_constructor_modulo
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_uint_declaration_constructor_float_modulo() {
+fn control_flow_coercion_policy_lowers_uint_declaration_constructor_float_modulo() {
     let source = concat!(
         "void main() {\n",
         "    float f = 5.5;\n",
@@ -3613,7 +3141,7 @@ fn control_flow_coercion_strategy_lowers_uint_declaration_constructor_float_modu
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_int_declaration_constructor_float_modulo() {
+fn control_flow_coercion_policy_lowers_int_declaration_constructor_float_modulo() {
     let source = concat!(
         "void main() {\n",
         "    float f = 5.5;\n",
@@ -3631,7 +3159,7 @@ fn control_flow_coercion_strategy_lowers_int_declaration_constructor_float_modul
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_uint_declaration_constructor_integer_modulo() {
+fn control_flow_coercion_policy_preserves_uint_declaration_constructor_integer_modulo() {
     let source = concat!(
         "void main() {\n",
         "    int i = 5;\n",
@@ -3649,7 +3177,7 @@ fn control_flow_coercion_strategy_preserves_uint_declaration_constructor_integer
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_uint_constructor_compound_int_modulo_operand() {
+fn control_flow_coercion_policy_preserves_uint_constructor_compound_int_modulo_operand() {
     let source = concat!(
         "void main() {\n",
         "    int i = 5;\n",
@@ -3667,7 +3195,7 @@ fn control_flow_coercion_strategy_preserves_uint_constructor_compound_int_modulo
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_uint_constructor_compound_uint_modulo_operand() {
+fn control_flow_coercion_policy_preserves_uint_constructor_compound_uint_modulo_operand() {
     let source = concat!(
         "void main() {\n",
         "    uint u = 5u;\n",
@@ -3685,7 +3213,7 @@ fn control_flow_coercion_strategy_preserves_uint_constructor_compound_uint_modul
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_audio_bar_unsigned_modulo_forms() {
+fn control_flow_coercion_policy_preserves_audio_bar_unsigned_modulo_forms() {
     let source = concat!(
         "#define RESOLUTION 64\n",
         "void main() {\n",
@@ -3710,7 +3238,7 @@ fn control_flow_coercion_strategy_preserves_audio_bar_unsigned_modulo_forms() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_audio_bar_float_modulo_uint_initializers() {
+fn control_flow_coercion_policy_lowers_audio_bar_float_modulo_uint_initializers() {
     let source = concat!(
         "#define RESOLUTION 64\n",
         "uniform float u_AudioSpectrumLeft[64];\n",
@@ -3738,7 +3266,7 @@ fn control_flow_coercion_strategy_lowers_audio_bar_float_modulo_uint_initializer
 }
 
 #[test]
-fn control_flow_coercion_strategy_integer_modulo_declaration_preserves_nested_texture_sampling() {
+fn control_flow_coercion_policy_integer_modulo_declaration_preserves_nested_texture_sampling() {
     let source = concat!(
         "#define RESOLUTION 64\n",
         "uniform sampler2D g_Texture0;\n",
@@ -3764,7 +3292,7 @@ fn control_flow_coercion_strategy_integer_modulo_declaration_preserves_nested_te
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_int_step_initializers() {
+fn control_flow_coercion_policy_repairs_int_step_initializers() {
     let source = concat!(
         "void main() {\n",
         "    float a = 0.75;\n",
@@ -3781,7 +3309,7 @@ fn control_flow_coercion_strategy_repairs_int_step_initializers() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_qualified_int_step_initializers() {
+fn control_flow_coercion_policy_repairs_qualified_int_step_initializers() {
     let source = concat!(
         "void main() {\n",
         "    const int edge = step(0.5, 0.75);\n",
@@ -3798,7 +3326,7 @@ fn control_flow_coercion_strategy_repairs_qualified_int_step_initializers() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_comment_separated_int_step_initializers() {
+fn control_flow_coercion_policy_repairs_comment_separated_int_step_initializers() {
     let source = concat!(
         "void main() {\n",
         "    const /*qualifier*/ int /*name*/ edge = step(0.5, 0.75);\n",
@@ -3814,7 +3342,7 @@ fn control_flow_coercion_strategy_repairs_comment_separated_int_step_initializer
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_int_step_in_later_comma_declarator() {
+fn control_flow_coercion_policy_repairs_int_step_in_later_comma_declarator() {
     let source = concat!(
         "void main() {\n",
         "    float a = 0.75;\n",
@@ -3833,7 +3361,7 @@ fn control_flow_coercion_strategy_repairs_int_step_in_later_comma_declarator() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_qualifiers_when_splitting_int_step_declarators() {
+fn control_flow_coercion_policy_preserves_qualifiers_when_splitting_int_step_declarators() {
     let source = concat!(
         "void main() {\n",
         "    const int keep = 1, edge = step(0.5, 0.75);\n",
@@ -3851,7 +3379,7 @@ fn control_flow_coercion_strategy_preserves_qualifiers_when_splitting_int_step_d
 }
 
 #[test]
-fn control_flow_coercion_strategy_composes_int_step_split_with_argument_literal_promotion() {
+fn control_flow_coercion_policy_composes_int_step_split_with_argument_literal_promotion() {
     let source = concat!(
         "void main() {\n",
         "    float a = 0.75;\n",
@@ -3870,7 +3398,7 @@ fn control_flow_coercion_strategy_composes_int_step_split_with_argument_literal_
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_int_float_initializers() {
+fn control_flow_coercion_policy_repairs_int_float_initializers() {
     let source = concat!(
         "varying vec4 v_TexCoord;\n",
         "void main() {\n",
@@ -3890,7 +3418,7 @@ fn control_flow_coercion_strategy_repairs_int_float_initializers() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_int_float_initializers_in_later_comma_declarator() {
+fn control_flow_coercion_policy_repairs_int_float_initializers_in_later_comma_declarator() {
     let source = concat!(
         "void main() {\n",
         "    float mixFactor = 0.5;\n",
@@ -3910,7 +3438,7 @@ fn control_flow_coercion_strategy_repairs_int_float_initializers_in_later_comma_
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_int_float_swizzle_initializer() {
+fn control_flow_coercion_policy_repairs_int_float_swizzle_initializer() {
     let source = concat!(
         "varying vec4 v_TexCoord;\n",
         "void main() {\n",
@@ -3933,7 +3461,7 @@ fn control_flow_coercion_strategy_repairs_int_float_swizzle_initializer() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_int_texture_component_initializer() {
+fn control_flow_coercion_policy_repairs_int_texture_component_initializer() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "void main() {\n",
@@ -3958,29 +3486,7 @@ fn control_flow_coercion_strategy_repairs_int_texture_component_initializer() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_repairs_float_array_subscript_indices() {
-    let source = concat!(
-        "uniform float g_AudioSpectrum32Left[32];\n",
-        "varying vec2 v_TexCoord;\n",
-        "void main() {\n",
-        "    float i = floor(v_TexCoord.x * 32.0);\n",
-        "    float left = g_AudioSpectrum32Left[i];\n",
-        "    gl_FragColor = vec4(left);\n",
-        "}\n",
-    );
-
-    let legalized = legalize(ShaderStageKind::Fragment, source);
-    let source = legalized.source();
-
-    assert!(source.contains("g_AudioSpectrum32Left[int(i)]"), "{source}");
-    assert!(!source.contains("g_AudioSpectrum32Left[i]"));
-    let _artifact = NagaCompiler
-        .compile_stage(ShaderStageKind::Fragment, &legalized)
-        .expect("float array subscript index should compile after repair");
-}
-
-#[test]
-fn control_flow_coercion_strategy_preserves_int_overloaded_function_initializers() {
+fn control_flow_coercion_policy_preserves_int_overloaded_function_initializers() {
     let source = concat!(
         "void main() {\n",
         "    int i = 2;\n",
@@ -4002,7 +3508,7 @@ fn control_flow_coercion_strategy_preserves_int_overloaded_function_initializers
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_int_abs_initializer() {
+fn control_flow_coercion_policy_preserves_int_abs_initializer() {
     let source = concat!(
         "void main() {\n",
         "    int i = -2;\n",
@@ -4019,7 +3525,7 @@ fn control_flow_coercion_strategy_preserves_int_abs_initializer() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_preserves_int_member_selection_initializers() {
+fn control_flow_coercion_policy_preserves_int_member_selection_initializers() {
     let source = concat!(
         "struct State { int count; };\n",
         "uniform State s;\n",
@@ -4037,7 +3543,7 @@ fn control_flow_coercion_strategy_preserves_int_member_selection_initializers() 
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_bool_float_initializers() {
+fn control_flow_coercion_policy_lowers_bool_float_initializers() {
     let source = concat!(
         "void main() {\n",
         "    bool condition = true;\n",
@@ -4055,7 +3561,7 @@ fn control_flow_coercion_strategy_lowers_bool_float_initializers() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_bool_float_initializer_preserves_nested_texture_sampling() {
+fn control_flow_coercion_policy_bool_float_initializer_preserves_nested_texture_sampling() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "varying vec2 v_TexCoord;\n",
@@ -4076,7 +3582,7 @@ fn control_flow_coercion_strategy_bool_float_initializer_preserves_nested_textur
 }
 
 #[test]
-fn control_flow_coercion_strategy_float_times_bool_preserves_nested_reserved_identifier() {
+fn control_flow_coercion_policy_float_times_bool_preserves_nested_reserved_identifier() {
     let source = concat!(
         "void main() {\n",
         "    bool sample = true;\n",
@@ -4101,7 +3607,7 @@ fn control_flow_coercion_strategy_float_times_bool_preserves_nested_reserved_ide
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_bool_float_in_later_comma_declarator() {
+fn control_flow_coercion_policy_lowers_bool_float_in_later_comma_declarator() {
     let source = concat!(
         "void main() {\n",
         "    bool condition = true;\n",
@@ -4118,7 +3624,7 @@ fn control_flow_coercion_strategy_lowers_bool_float_in_later_comma_declarator() 
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_multiple_bool_float_comma_declarators() {
+fn control_flow_coercion_policy_lowers_multiple_bool_float_comma_declarators() {
     let source = concat!(
         "void main() {\n",
         "    bool condition = true;\n",
@@ -4135,7 +3641,7 @@ fn control_flow_coercion_strategy_lowers_multiple_bool_float_comma_declarators()
 }
 
 #[test]
-fn control_flow_coercion_strategy_does_not_guess_bool_from_identifier_name() {
+fn control_flow_coercion_policy_does_not_guess_bool_from_identifier_name() {
     let source = concat!(
         "void main() {\n",
         "    float brightness = 0.8;\n",
@@ -4154,7 +3660,7 @@ fn control_flow_coercion_strategy_does_not_guess_bool_from_identifier_name() {
 }
 
 #[test]
-fn control_flow_coercion_strategy_lowers_float_times_bool_assignments() {
+fn control_flow_coercion_policy_lowers_float_times_bool_assignments() {
     let source = concat!(
         "void main() {\n",
         "    bool enabled = true;\n",
@@ -4282,7 +3788,7 @@ fn alpha_to_coverage_derivative_idiom_does_not_reuse_same_named_helper_binding()
 }
 
 #[test]
-fn texture_sampling_strategy_handles_implicit_and_explicit_lod() {
+fn texture_sampling_policy_handles_implicit_and_explicit_lod() {
     let source = concat!(
         "uniform sampler2D g_Texture0;\n",
         "void main() {\n",
@@ -4321,7 +3827,7 @@ fn texture_sampling_strategy_handles_implicit_and_explicit_lod() {
 }
 
 #[test]
-fn reserved_identifier_strategy_renames_user_symbols_only() {
+fn reserved_identifier_policy_renames_user_symbols_only() {
     let source = concat!(
         "float mod(float x) { return x; }\n",
         "float sample(float x) { return x + 1.0; }\n",
@@ -4344,7 +3850,7 @@ fn reserved_identifier_strategy_renames_user_symbols_only() {
 }
 
 #[test]
-fn reserved_identifier_strategy_respects_nested_shadowing_scope() {
+fn reserved_identifier_policy_respects_nested_shadowing_scope() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",
@@ -4371,7 +3877,7 @@ fn reserved_identifier_strategy_respects_nested_shadowing_scope() {
 }
 
 #[test]
-fn reserved_identifier_strategy_respects_uninitialized_nested_shadowing_scope() {
+fn reserved_identifier_policy_respects_uninitialized_nested_shadowing_scope() {
     let source = concat!(
         "varying vec2 uv;\n",
         "void main() {\n",

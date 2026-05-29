@@ -1,7 +1,10 @@
 //! Parser context for one shader source.
 
-use super::{Parser, ShaderModule, ShaderSourceText};
-use crate::{ShaderResult, ShaderStageKind, SourceSpan, tokenizer::TokenStream};
+use super::{Parser, ShaderModule, ShaderSourceText, source::SourceTextView};
+use crate::{
+    ShaderResult, ShaderStageKind, SourceSpan,
+    lexer::{Token, TokenStream, TokenStreamExt},
+};
 
 /// Semantic parsing owner for one shader source.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -11,7 +14,13 @@ pub struct ParsingContext<'src> {
     /// Typed source view being parsed.
     source: ShaderSourceText<'src>,
     /// Lexed tokens for the source.
-    tokens: TokenStream,
+    tokens: TokenStream<'src>,
+}
+
+impl<'src> SourceTextView<'src> for ParsingContext<'src> {
+    fn source_text(&self) -> ShaderSourceText<'src> {
+        self.source
+    }
 }
 
 impl<'src> ParsingContext<'src> {
@@ -48,8 +57,8 @@ impl<'src> ParsingContext<'src> {
 
     /// Returns the typed shader source view.
     #[must_use]
-    pub const fn source(&self) -> ShaderSourceText<'src> {
-        self.source
+    pub fn source(&self) -> ShaderSourceText<'src> {
+        self.source_text()
     }
 
     /// Borrows the source text covered by `span`.
@@ -58,9 +67,9 @@ impl<'src> ParsingContext<'src> {
         self.source().slice(span)
     }
 
-    /// Returns the lexed token stream.
+    /// Returns lexed tokens in source order.
     #[must_use]
-    pub const fn token_stream(&self) -> &TokenStream {
+    pub fn tokens(&self) -> &[Token<'src>] {
         &self.tokens
     }
 
@@ -73,7 +82,7 @@ impl<'src> ParsingContext<'src> {
     pub fn parse(&self) -> ShaderResult<ShaderModule<'src>> {
         let mut parser = Parser {
             context: self,
-            tokens: self.token_stream().cursor(),
+            tokens: self.tokens(),
             cursor: 0,
         };
         parser.parse_module()
