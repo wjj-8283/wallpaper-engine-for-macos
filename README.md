@@ -76,7 +76,7 @@ Steam> app_update 431960 validate
 
 安装过程可能会很长，因为会连带创意工坊内容一起下载下来，安装完成后后续的更新、创意工坊内容的下载可以使用 Steam 客户端进行
 
-**设置壁纸目录和Assets目录**
+**设置壁纸目录和Assets目录（默认就是）**
 
 将壁纸目录设置为```~/Library/Application Support/Steam/steamapps/workshop/content/431960```
 将Assets目录设置为```~/Library/Application Support/Steam/steamapps/common/wallpaper_engine/assets```
