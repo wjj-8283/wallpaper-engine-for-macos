@@ -44,11 +44,11 @@ use crate::{
             GetLibrarySnapshot, GetMonitorInformationSnapshot, GetSettingsSnapshot,
             GetWallpaperOptionsSnapshot, PollMousePosition, RefreshDisplays, RefreshLibrary,
             RestorePropertyDefault, SelectWallpaper, SetAudioResponseEnabled,
-            SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode, SetFilter,
-            SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
-            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
-            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, Shutdown,
-            SetWorkshopDir, SetAssetsDir,
+            SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayHorizontalFlip, SetDisplayMode,
+            SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted,
+            SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
+            SetMirrorVolume, SetMuted, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume,
+            Shutdown, SetWorkshopDir, SetAssetsDir,
         },
         state::BridgeActorState,
     },
@@ -678,6 +678,23 @@ impl WallpaperBridge {
         mode: BridgeDisplayMode,
     ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
         self.actor.ask(SetDisplayMode { display_id, mode }).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the display id is unknown or the display update
+    /// fails.
+    pub async fn set_display_horizontal_flip(
+        &self,
+        display_id: String,
+        enabled: bool,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor
+            .ask(SetDisplayHorizontalFlip {
+                display_id,
+                enabled,
+            })
+            .await
     }
 
     /// # Errors

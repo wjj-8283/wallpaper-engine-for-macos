@@ -529,7 +529,7 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 public protocol WallpaperBridgeProtocol : AnyObject {
-    
+
     /**
      * # Errors
      *
@@ -714,6 +714,14 @@ public protocol WallpaperBridgeProtocol : AnyObject {
      */
     func setDisplayEnabled(displayId: String, enabled: Bool) async throws  -> BridgeDisplayMutationBundle
     
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown or the display update
+     * fails.
+     */
+    func setDisplayHorizontalFlip(displayId: String, enabled: Bool) async throws  -> BridgeDisplayMutationBundle
+
     /**
      * # Errors
      *
@@ -946,7 +954,7 @@ open func appSnapshot()async throws  -> BridgeAppSnapshot {
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-    
+
     /**
      * # Errors
      *
@@ -968,7 +976,7 @@ open func applyWallpaperOptions(wallpaperId: String)async throws  -> BridgeWallp
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-    
+
     /**
      * # Errors
      *
@@ -991,7 +999,7 @@ open func bootstrap()async throws  -> BridgeSnapshotBundle {
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-    
+
     /**
      * # Errors
      *
@@ -1013,7 +1021,7 @@ open func cancelWallpaperOptions(wallpaperId: String)async throws  -> BridgeWall
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-    
+
     /**
      * # Errors
      *
@@ -1048,7 +1056,7 @@ open func clearShaderCache()async throws  -> BridgeSettingsSnapshot {
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-    
+
     /**
      * # Errors
      *
@@ -1071,7 +1079,7 @@ open func editProperty(wallpaperId: String, propertyId: String, value: BridgePro
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-    
+
     /**
      * # Errors
      *
@@ -1457,6 +1465,29 @@ open func setDisplayMode(displayId: String, mode: BridgeDisplayMode)async throws
         )
 }
     
+    /**
+     * # Errors
+     *
+     * Returns an error when the display id is unknown or the display update
+     * fails.
+     */
+open func setDisplayHorizontalFlip(displayId: String, enabled: Bool)async throws  -> BridgeDisplayMutationBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_display_horizontal_flip(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(displayId),FfiConverterBool.lower(enabled)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeDisplayMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+
     /**
      * # Errors
      *
@@ -2168,10 +2199,11 @@ public struct BridgeDisplaySettingsRow {
     public var maxFps: UInt32
     public var muted: Bool
     public var volume: Float
+    public var horizontalFlip: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displayId: String, title: String, enabled: Bool, mode: BridgeDisplayMode, mirrorTargets: [String], selectedMirrorTarget: String?, scalingMode: BridgeScalingMode, scalingFactor: Double, targetFps: UInt32, maxFps: UInt32, muted: Bool, volume: Float) {
+    public init(displayId: String, title: String, enabled: Bool, mode: BridgeDisplayMode, mirrorTargets: [String], selectedMirrorTarget: String?, scalingMode: BridgeScalingMode, scalingFactor: Double, targetFps: UInt32, maxFps: UInt32, muted: Bool, volume: Float, horizontalFlip: Bool) {
         self.displayId = displayId
         self.title = title
         self.enabled = enabled
@@ -2184,6 +2216,7 @@ public struct BridgeDisplaySettingsRow {
         self.maxFps = maxFps
         self.muted = muted
         self.volume = volume
+        self.horizontalFlip = horizontalFlip
     }
 }
 
@@ -2227,6 +2260,9 @@ extension BridgeDisplaySettingsRow: Equatable, Hashable {
         if lhs.volume != rhs.volume {
             return false
         }
+        if lhs.horizontalFlip != rhs.horizontalFlip {
+            return false
+        }
         return true
     }
 
@@ -2243,6 +2279,7 @@ extension BridgeDisplaySettingsRow: Equatable, Hashable {
         hasher.combine(maxFps)
         hasher.combine(muted)
         hasher.combine(volume)
+        hasher.combine(horizontalFlip)
     }
 }
 
@@ -2265,7 +2302,8 @@ public struct FfiConverterTypeBridgeDisplaySettingsRow: FfiConverterRustBuffer {
                 targetFps: FfiConverterUInt32.read(from: &buf), 
                 maxFps: FfiConverterUInt32.read(from: &buf), 
                 muted: FfiConverterBool.read(from: &buf), 
-                volume: FfiConverterFloat.read(from: &buf)
+                volume: FfiConverterFloat.read(from: &buf),
+                horizontalFlip: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2282,6 +2320,7 @@ public struct FfiConverterTypeBridgeDisplaySettingsRow: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.maxFps, into: &buf)
         FfiConverterBool.write(value.muted, into: &buf)
         FfiConverterFloat.write(value.volume, into: &buf)
+        FfiConverterBool.write(value.horizontalFlip, into: &buf)
     }
 }
 
