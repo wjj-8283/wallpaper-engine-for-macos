@@ -38,6 +38,8 @@
 
 ### 1.从GitHub Releases里面下载该应用
 
+如果打开时遇到安全报错，前往系统设置-隐私与安全性中选择“仍要打开”即可
+
 ### 2.获取壁纸和Assets
 
 #### 方法一：从Windows版本中复制
@@ -47,6 +49,25 @@
 再复制```Steam游戏安装目录\common\wallpaper_engine\assets```中的内容，到另一个目录（不要和壁纸放一起），设置Assets目录为对应的目录
 
 #### 方法二：使用SteamCMD下载
+
+**安装 SteamCMD**
+
+- 使用 [Homebrew](https://brew.sh/zh-cn/) 安装
+
+```shell
+brew install steamcmd
+```
+
+- 从 [官网](https://developer.valvesoftware.com/wiki/SteamCMD) 下载
+
+```shell
+mkdir ~/Steam && cd ~/Steam
+curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz" | tar zxvf -
+
+# 添加到环境变量
+echo "export PATH=$PATH:$HOME/Steam" >> ~/.zshrc
+source ~/.zshrc
+```
 
 **打开 SteamCMD 并登录**
 
