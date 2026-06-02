@@ -166,7 +166,13 @@ impl SceneRuntime {
             )
             .map_err(web_error_to_engine)?;
             let mut window = WallpaperWindow::builder(desc.display.clone()).open()?;
-            window.install_web_view(&web_entry, Some(&web_properties))?;
+            let initial_display = wallpaper_web::InitialDisplayConfig {
+                horizontal_flip: desc.horizontal_flip,
+                scaling_mode: desc.scaling_mode.to_string(),
+                scaling_factor: desc.scaling_factor,
+                fps: desc.fps,
+            };
+            window.install_web_view(&web_entry, Some(&web_properties), &initial_display)?;
             let web_runtime = wallpaper_web::Runtime::start(
                 move || {
                     backend
@@ -627,8 +633,9 @@ impl SceneRuntime {
                 runtime
                     .set_scaling_factor(self.desc.scaling_factor)
                     .map_err(web_error_to_engine)?;
+                runtime.set_fps(self.desc.fps).map_err(web_error_to_engine)?;
                 runtime
-                    .set_fps(self.desc.fps)
+                    .set_horizontal_flip(self.desc.horizontal_flip)
                     .map_err(web_error_to_engine)?;
             }
         }
