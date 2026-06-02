@@ -297,6 +297,22 @@
         }
       }
     },
+    "Shader Pipeline" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shader Pipeline"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "着色器管线"
+          }
+        }
+      }
+    },
     "Current Wallpaper" : {
       "localizations" : {
         "en" : {

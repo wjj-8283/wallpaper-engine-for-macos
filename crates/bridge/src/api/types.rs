@@ -210,10 +210,10 @@ pub struct BridgeSettingsSnapshot {
     pub launch_at_login_available: bool,
     pub launch_at_login_enabled: bool,
     pub pause_on_battery_power: bool,
-    pub app_version: String,
     pub git_sha: String,
     pub bridge_version: String,
     pub core_version: String,
+    pub shader_pipeline_version: String,
     pub storage: BridgeStorageStatus,
 }
 

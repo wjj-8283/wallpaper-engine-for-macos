@@ -13,6 +13,7 @@ struct AboutSection: View {
                 LabeledContent("App", value: appVersion)
                 LabeledContent("Bridge", value: store.settingsSnapshot.bridgeVersion)
                 LabeledContent("Core", value: store.settingsSnapshot.coreVersion)
+                LabeledContent("Shader Pipeline", value: store.settingsSnapshot.shaderPipelineVersion)
                 LabeledContent("Git", value: gitCommitHash)
                 LabeledContent("Project URL") {
                     Link("Link", destination: projectURL)
@@ -24,7 +25,7 @@ struct AboutSection: View {
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? store.settingsSnapshot.appVersion
+            ?? ""
     }
 
     private var gitCommitHash: String {

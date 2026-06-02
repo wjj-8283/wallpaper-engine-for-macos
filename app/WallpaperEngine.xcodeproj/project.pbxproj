@@ -487,7 +487,7 @@
 					"$(SRCROOT)/../target/release",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1.1;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(NIX_LDFLAGS)",
@@ -583,7 +583,7 @@
 					"$(SRCROOT)/../target/release",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1.1;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(NIX_LDFLAGS)",

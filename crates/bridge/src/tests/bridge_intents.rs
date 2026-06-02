@@ -221,7 +221,9 @@ async fn display_snapshots_are_built_from_engine_state() {
         settings.displays[1].selected_mirror_target.as_deref(),
         Some("primary")
     );
-    assert!(!settings.bridge_version.is_empty());
+    assert_eq!(settings.bridge_version, "0.1.2");
+    assert_eq!(settings.core_version, "0.2.0");
+    assert_eq!(settings.shader_pipeline_version, "0.1.0");
 }
 
 #[tokio::test]

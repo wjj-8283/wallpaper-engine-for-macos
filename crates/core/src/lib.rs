@@ -19,6 +19,8 @@
 #![deny(clippy::complexity)]
 #![warn(clippy::pedantic)]
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg(test)]
 extern crate self as wallpaper_core;
 

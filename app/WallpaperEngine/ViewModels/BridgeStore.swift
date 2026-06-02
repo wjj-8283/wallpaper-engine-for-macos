@@ -268,10 +268,10 @@ final class BridgeStore {
                 launchAtLoginAvailable: false,
                 launchAtLoginEnabled: false,
                 pauseOnBatteryPower: false,
-                appVersion: "",
                 gitSha: "",
                 bridgeVersion: "",
                 coreVersion: "",
+                shaderPipelineVersion: "",
                 storage: BridgeStorageStatus(
                     shaderCacheSizeBytes: 0,
                     logs: BridgeLogStatus(

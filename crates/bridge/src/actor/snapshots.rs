@@ -21,14 +21,7 @@ use crate::{
 
 const MIRROR_DISPLAY_MODE: &str = "mirror";
 const UNKNOWN_GIT_SHA: &str = "Unknown";
-
-fn build_value(value: &'static str, fallback: &'static str) -> String {
-    if value.trim().is_empty() {
-        fallback.to_string()
-    } else {
-        value.to_string()
-    }
-}
+const SHADER_PIPELINE_VERSION: &str = "0.1.0";
 
 fn directory_size(path: &Path) -> u64 {
     let Ok(metadata) = fs::metadata(path) else {
@@ -360,8 +353,6 @@ impl BridgeActorState {
                 })
                 .collect()
         };
-        let crate_version = env!("CARGO_PKG_VERSION").to_string();
-
         BridgeSettingsSnapshot {
             displays: rows,
             launch_at_login_available: matches!(
@@ -373,13 +364,13 @@ impl BridgeActorState {
                 LaunchAtLoginStatus::Unavailable => false,
             },
             pause_on_battery_power: self.app_config.power.pause_on_battery_power,
-            app_version: build_value(crate::build::VERSION, env!("CARGO_PKG_VERSION")),
-            git_sha: build_value(
-                option_env!("GIT_SHORT_COMMIT").unwrap_or(crate::build::SHORT_COMMIT),
-                UNKNOWN_GIT_SHA,
-            ),
-            bridge_version: crate_version.clone(),
-            core_version: crate_version,
+            git_sha: match option_env!("GIT_SHORT_COMMIT").unwrap_or(crate::build::SHORT_COMMIT) {
+                value if value.trim().is_empty() => UNKNOWN_GIT_SHA.to_string(),
+                value => value.to_string(),
+            },
+            bridge_version: env!("CARGO_PKG_VERSION").to_string(),
+            core_version: wallpaper_core::VERSION.to_string(),
+            shader_pipeline_version: SHADER_PIPELINE_VERSION.to_string(),
             storage: BridgeStorageStatus {
                 shader_cache_size_bytes: directory_size(&paths.shader_cache_root()),
                 logs: ApplicationLogger::status().map_or_else(
@@ -402,15 +393,8 @@ impl BridgeActorState {
 mod tests {
     use std::fs;
 
-    use super::{build_value, directory_size};
+    use super::directory_size;
     use crate::{login::LaunchAtLoginStatus, paths::BridgePaths};
-
-    #[test]
-    fn build_value_uses_fallback_for_empty_values() {
-        assert_eq!(build_value("abc123", "fallback"), "abc123");
-        assert_eq!(build_value("", "fallback"), "fallback");
-        assert_eq!(build_value("   ", "fallback"), "fallback");
-    }
 
     #[test]
     fn directory_size_sums_nested_files() {
