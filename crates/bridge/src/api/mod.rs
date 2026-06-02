@@ -21,7 +21,7 @@ pub use types::{
     BridgeWallpaperOptionsSnapshot,
 };
 use wallpaper_core::{
-    DisplaySelector, WallpaperAssignment, WallpaperEngine,
+    DisplaySelector, FirstFrameCallback, WallpaperAssignment, WallpaperEngine,
     media::audio::AudioVolume,
     project::{ScalingMode, SceneHandle, SceneResult},
 };
@@ -29,7 +29,7 @@ use wallpaper_core::{
 #[cfg(test)]
 use crate::actor::messages::{
     InjectDisplayForTest, InjectSceneProjectForTest, InjectSceneWallpaperConfigForTest,
-    InjectWallpaperForTest, ReplaceLibraryForTest, ReplaceWallpaperConfigForTest,
+    InjectWallpaperForTest, ReplaceLibraryForTest, ReplaceWallpaperConfigForTest, SetPowerSource,
 };
 #[cfg(test)]
 use crate::config::WallpaperConfig;
@@ -42,12 +42,13 @@ use crate::{
             ApplyWallpaperOptions, Bootstrap, CancelWallpaperOptions, ClearShaderCache,
             EditProperty, EjectWallpaperFromDisplay, GetAllSnapshots, GetAppSnapshot,
             GetLibrarySnapshot, GetMonitorInformationSnapshot, GetSettingsSnapshot,
-            GetWallpaperOptionsSnapshot, PollMousePosition, RefreshDisplays, RefreshLibrary,
-            RestorePropertyDefault, SelectWallpaper, SetAudioResponseEnabled,
+            GetWallpaperOptionsSnapshot, InitialFrameReady, PollMousePosition, RefreshDisplays,
+            RefreshLibrary, RestorePropertyDefault, SelectWallpaper, SetAudioResponseEnabled,
             SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode, SetFilter,
             SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
             SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
-            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, Shutdown,
+            SetPauseOnBatteryPower, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume,
+            Shutdown,
         },
         state::BridgeActorState,
     },
@@ -55,6 +56,7 @@ use crate::{
     engine::{EngineFacade, RealEngineFacade},
     login::LaunchAtLoginController,
     paths::BridgePaths,
+    power::{PowerSource, PowerWatcher, SystemPowerSource},
 };
 
 pub(crate) fn bridge_log_status(status: crate::logging::LogStatus) -> BridgeLogStatus {
@@ -73,6 +75,8 @@ pub struct BridgeBuilder<E: EngineFacade> {
     launch_at_login: LaunchAtLoginController,
     paths: BridgePaths,
     mouse_polling_enabled: bool,
+    power_watching_enabled: bool,
+    startup_power_source: Option<PowerSource>,
 }
 
 impl<E: EngineFacade> BridgeBuilder<E> {
@@ -85,6 +89,8 @@ impl<E: EngineFacade> BridgeBuilder<E> {
             launch_at_login: LaunchAtLoginController::default(),
             paths: BridgePaths::new(),
             mouse_polling_enabled: true,
+            power_watching_enabled: !cfg!(test),
+            startup_power_source: None,
         }
     }
 
@@ -116,30 +122,64 @@ impl<E: EngineFacade> BridgeBuilder<E> {
         self
     }
 
+    #[cfg(test)]
+    pub fn with_power_watching_enabled(mut self, enabled: bool) -> Self {
+        self.power_watching_enabled = enabled;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_startup_power_source(mut self, source: PowerSource) -> Self {
+        self.startup_power_source = Some(source);
+        self
+    }
+
     pub fn build(self) -> Result<WallpaperBridge, BridgeError> {
+        let startup_power_source = if cfg!(test) {
+            self.startup_power_source
+        } else {
+            Some(
+                self.startup_power_source
+                    .unwrap_or_else(SystemPowerSource::current),
+            )
+        };
         let loaded_store = if let Some(store) = &self.config_store {
             Some(store.load()?)
         } else {
             None
         };
 
-        let state = self.state.unwrap_or_else(|| {
+        let mut state = self.state.unwrap_or_else(|| {
             if let Some(loaded_store) = loaded_store {
                 BridgeActorState::from_app_config(loaded_store.config)
             } else {
                 BridgeActorState::default()
             }
         });
+        if let Some(source) = startup_power_source {
+            state.apply_startup_power_source(source);
+            log::info!("startup power source sampled: {source:?}");
+        }
 
+        let engine = ArcEngineFacade::new(self.engine);
         let actor = BridgeActorHandle::spawn(
             state,
-            ArcEngineFacade::new(self.engine),
+            engine.clone(),
             self.config_store.clone(),
             self.launch_at_login,
             self.paths,
         )?;
+        let first_frame_notifier = FirstFrameNotifier {
+            actor: actor.clone(),
+        };
+        engine.set_first_frame_callback(first_frame_notifier.callback());
         let mouse_poller = if self.mouse_polling_enabled {
             Some(MousePoller::spawn(actor.clone()))
+        } else {
+            None
+        };
+        let power_watcher = if self.power_watching_enabled {
+            Some(PowerWatcher::spawn(actor.clone()))
         } else {
             None
         };
@@ -147,6 +187,7 @@ impl<E: EngineFacade> BridgeBuilder<E> {
         Ok(WallpaperBridge {
             actor,
             mouse_poller,
+            power_watcher,
             _config_store: self.config_store,
         })
     }
@@ -155,6 +196,29 @@ impl<E: EngineFacade> BridgeBuilder<E> {
 struct MousePoller {
     stop: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
+}
+
+struct FirstFrameNotifier {
+    actor: BridgeActorHandle<ArcEngineFacade>,
+}
+
+impl FirstFrameNotifier {
+    fn callback(&self) -> FirstFrameCallback {
+        let actor = self.actor.clone();
+        Arc::new(move |handle| {
+            log::info!("first frame ready for scene handle {}", handle.raw());
+            let actor = actor.clone();
+            let _ = std::thread::Builder::new()
+                .name("wallpaper-bridge-first-frame".to_string())
+                .spawn(move || {
+                    let result: Result<BridgeSnapshotBundle, BridgeError> =
+                        actor.blocking_ask(InitialFrameReady);
+                    if let Err(error) = result {
+                        log::debug!("initial-frame notification skipped: {error}");
+                    }
+                });
+        })
+    }
 }
 
 impl MousePoller {
@@ -196,6 +260,8 @@ pub struct WallpaperBridge {
     actor: BridgeActorHandle<ArcEngineFacade>,
     #[allow(dead_code)]
     mouse_poller: Option<MousePoller>,
+    #[allow(dead_code)]
+    power_watcher: Option<PowerWatcher<ArcEngineFacade>>,
     _config_store: Option<ConfigStore>,
 }
 
@@ -346,6 +412,10 @@ impl EngineFacade for ArcEngineFacade {
         Box<dyn Future<Output = Result<Option<SceneHandle>, wallpaper_core::EngineError>> + Send>,
     > {
         self.0.set_wallpaper_for_display(selector, assignment)
+    }
+
+    fn set_first_frame_callback(&self, callback: FirstFrameCallback) {
+        self.0.set_first_frame_callback(callback);
     }
 }
 
@@ -765,6 +835,17 @@ impl WallpaperBridge {
 
     /// # Errors
     ///
+    /// Returns an error when the setting cannot be persisted or an immediate
+    /// power-policy playback transition fails.
+    pub async fn set_pause_on_battery_power(
+        &self,
+        enabled: bool,
+    ) -> Result<BridgeSnapshotBundle, BridgeError> {
+        self.actor.ask(SetPauseOnBatteryPower { enabled }).await
+    }
+
+    /// # Errors
+    ///
     /// Returns an error when the wallpaper id, property id, or value is
     /// invalid.
     pub async fn edit_property(
@@ -970,6 +1051,42 @@ impl WallpaperBridge {
             })
             .await
             .expect("test wallpaper config replacement should succeed");
+    }
+
+    /// # Panics
+    ///
+    /// Panics if the actor rejects the test power source update.
+    pub async fn set_power_source_for_test(&self, source: crate::power::PowerSource) {
+        self.actor
+            .ask(SetPowerSource {
+                source,
+                initial_sample: false,
+            })
+            .await
+            .expect("test power source update should succeed");
+    }
+
+    /// # Panics
+    ///
+    /// Panics if the actor rejects the test initial power source update.
+    pub async fn set_initial_power_source_for_test(&self, source: crate::power::PowerSource) {
+        self.actor
+            .ask(SetPowerSource {
+                source,
+                initial_sample: true,
+            })
+            .await
+            .expect("test initial power source update should succeed");
+    }
+
+    /// # Panics
+    ///
+    /// Panics if the actor rejects the test initial-frame readiness update.
+    pub async fn initial_frame_ready_for_test(&self) {
+        self.actor
+            .ask(InitialFrameReady)
+            .await
+            .expect("test initial-frame readiness update should succeed");
     }
 }
 

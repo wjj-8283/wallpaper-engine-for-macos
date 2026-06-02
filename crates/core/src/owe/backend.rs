@@ -10,6 +10,7 @@ use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
     panic::{AssertUnwindSafe, catch_unwind},
     ptr::NonNull,
+    sync::Arc,
 };
 
 use serde_json::Value;
@@ -24,6 +25,8 @@ use crate::{
 /// Private handle to the statically linked Open Wallpaper Engine renderer.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OweBackend;
+
+pub type FirstFrameCallback = Arc<dyn Fn() + Send + Sync + 'static>;
 
 impl OweBackend {
     /// Initializes access to the statically linked backend.
@@ -61,6 +64,7 @@ impl OweBackend {
         scaling_mode: ScalingMode,
         scaling_factor: f64,
         render_resolution: Option<(u32, u32)>,
+        first_frame_callback: Option<FirstFrameCallback>,
     ) -> Result<OweScene, EngineError> {
         let mut raw = std::ptr::null_mut();
         call_status("owe_scene_wallpaper_new", || unsafe {
@@ -76,6 +80,7 @@ impl OweBackend {
         };
         scene.initialize_renderer(desc, metal_layer, render_resolution)?;
         scene.apply_scene_config(desc)?;
+        scene.set_first_frame_callback(first_frame_callback)?;
         scene.set_scaling_mode(scaling_mode)?;
         scene.set_scaling_factor(scaling_factor)?;
         Ok(scene)
@@ -399,6 +404,47 @@ impl OweScene {
         })
     }
 
+    /// Registers a first-frame callback owned by this renderer scene.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError`] if the scene is closed or OWE rejects the
+    /// callback registration.
+    pub fn set_first_frame_callback(
+        &mut self,
+        callback: Option<FirstFrameCallback>,
+    ) -> Result<(), EngineError> {
+        let Some(callback) = callback else {
+            let raw = self.raw_ptr()?;
+            return call_status("owe_scene_wallpaper_set_first_frame_callback", || unsafe {
+                sys::owe_scene_wallpaper_set_first_frame_callback(
+                    raw.as_ptr(),
+                    Some(owe_first_frame_callback),
+                    std::ptr::null_mut(),
+                    Some(owe_first_frame_callback_drop),
+                )
+            });
+        };
+
+        let user_data = Box::into_raw(Box::new(callback)).cast::<c_void>();
+        let raw = self.raw_ptr()?;
+        let result = call_status("owe_scene_wallpaper_set_first_frame_callback", || unsafe {
+            sys::owe_scene_wallpaper_set_first_frame_callback(
+                raw.as_ptr(),
+                Some(owe_first_frame_callback),
+                user_data,
+                Some(owe_first_frame_callback_drop),
+            )
+        });
+        if result.is_err() {
+            // SAFETY: `user_data` was produced by `Box::into_raw` immediately
+            // above and OWE rejected the registration, so Rust must reclaim
+            // that box.
+            drop(unsafe { Box::<FirstFrameCallback>::from_raw(user_data.cast()) });
+        }
+        result
+    }
+
     /// Sends normalized mouse coordinates to the renderer.
     ///
     /// # Errors
@@ -711,6 +757,34 @@ unsafe extern "C-unwind" fn owe_log_callback(
             .line(line)
             .build();
         log::logger().log(&record);
+    }));
+}
+
+#[allow(clippy::single_call_fn)]
+unsafe extern "C-unwind" fn owe_first_frame_callback(user_data: *mut c_void) {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        if user_data.is_null() {
+            return;
+        }
+
+        // SAFETY: `user_data` is produced by `OweScene::set_first_frame_callback`
+        // from `Box<FirstFrameCallback>`. The C++ wrapper owns that box until
+        // it invokes `owe_first_frame_callback_drop`.
+        let callback = unsafe { &*user_data.cast::<FirstFrameCallback>() };
+        callback();
+    }));
+}
+
+#[allow(clippy::single_call_fn)]
+unsafe extern "C-unwind" fn owe_first_frame_callback_drop(user_data: *mut c_void) {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        if user_data.is_null() {
+            return;
+        }
+
+        // SAFETY: C++ calls this exactly once for each `Box<FirstFrameCallback>`
+        // transferred through `owe_scene_wallpaper_set_first_frame_callback`.
+        drop(unsafe { Box::<FirstFrameCallback>::from_raw(user_data.cast()) });
     }));
 }
 

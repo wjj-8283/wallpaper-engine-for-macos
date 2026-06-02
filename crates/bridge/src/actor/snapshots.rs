@@ -372,6 +372,7 @@ impl BridgeActorState {
                 LaunchAtLoginStatus::Available { enabled } => enabled,
                 LaunchAtLoginStatus::Unavailable => false,
             },
+            pause_on_battery_power: self.app_config.power.pause_on_battery_power,
             app_version: build_value(crate::build::VERSION, env!("CARGO_PKG_VERSION")),
             git_sha: build_value(
                 option_env!("GIT_SHORT_COMMIT").unwrap_or(crate::build::SHORT_COMMIT),

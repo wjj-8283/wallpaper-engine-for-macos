@@ -12,6 +12,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub general: GeneralCfg,
     #[serde(default)]
+    pub power: PowerCfg,
+    #[serde(default)]
     pub ui: UiCfg,
     #[serde(default)]
     pub monitors: Vec<MonitorCfg>,
@@ -24,6 +26,7 @@ impl Default for AppConfig {
         Self {
             schema_version: SCHEMA_VERSION,
             general: GeneralCfg::default(),
+            power: PowerCfg::default(),
             ui: UiCfg::default(),
             monitors: Vec::new(),
             monitor_settings: Vec::new(),
@@ -34,6 +37,12 @@ impl Default for AppConfig {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeneralCfg {
     pub last_selected_wallpaper: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PowerCfg {
+    #[serde(default)]
+    pub pause_on_battery_power: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

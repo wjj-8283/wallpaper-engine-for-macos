@@ -23,22 +23,23 @@ use crate::{
             CommitApplyAfterReconcile, CommitDisplayAfterReconcile, CompleteRestoreAfterReconcile,
             EditProperty, EjectWallpaperFromDisplay, GetAllSnapshots, GetAppSnapshot,
             GetLibrarySnapshot, GetMonitorInformationSnapshot, GetSettingsSnapshot,
-            GetWallpaperOptionsSnapshot, InjectDisplayForTest, InjectSceneProjectForTest,
-            InjectSceneWallpaperConfigForTest, InjectWallpaperForTest, PollMousePosition,
-            ReconcileFailed, RefreshDisplays, RefreshLibrary, ReplaceLibraryForTest,
-            ReplaceWallpaperConfigForTest, RestorePropertyDefault, SelectWallpaper,
-            SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode,
-            SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
-            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
-            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, Shutdown,
+            GetWallpaperOptionsSnapshot, InitialFrameReady, InjectDisplayForTest,
+            InjectSceneProjectForTest, InjectSceneWallpaperConfigForTest, InjectWallpaperForTest,
+            PollMousePosition, ReconcileFailed, RefreshDisplays, RefreshLibrary,
+            ReplaceLibraryForTest, ReplaceWallpaperConfigForTest, RestorePropertyDefault,
+            SelectWallpaper, SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled,
+            SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted,
+            SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
+            SetMirrorVolume, SetMuted, SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor,
+            SetScalingMode, SetTargetFps, SetVolume, Shutdown,
         },
         state::BridgeActorState,
     },
     api::{
         BridgeAppSnapshot, BridgeDisplayMode, BridgeDisplayMutationBundle,
         BridgeDisplaySettingsRow, BridgeError, BridgeLibraryScanStatus, BridgeLibrarySnapshot,
-        BridgePropertyValue, BridgeScalingMode, BridgeSnapshotBundle, BridgeWallpaperEntry,
-        BridgeWallpaperKind, BridgeWallpaperMutationBundle,
+        BridgePlaybackState, BridgePropertyValue, BridgeScalingMode, BridgeSnapshotBundle,
+        BridgeWallpaperEntry, BridgeWallpaperKind, BridgeWallpaperMutationBundle,
     },
     config::{AppConfig, ConfigStore, SerializedSelector, WallpaperConfig},
     display::{DisplaySelectorExt, DisplaySnapshotExt},
@@ -76,6 +77,11 @@ pub struct BridgeActor<E: EngineFacade> {
     pub config_store: Option<ConfigStore>,
     launch_at_login: LaunchAtLoginController,
     paths: BridgePaths,
+}
+
+enum PlaybackChangeOrigin {
+    Manual,
+    Power,
 }
 
 #[derive(Clone)]
@@ -402,6 +408,77 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
         })
     }
 
+    async fn set_playback(
+        &mut self,
+        playback_state: BridgePlaybackState,
+        paused: bool,
+        origin: PlaybackChangeOrigin,
+    ) -> Result<(), BridgeError> {
+        self.engine
+            .set_all_paused(paused)
+            .await
+            .map_err(|error| BridgeError::engine(error.to_string()))?;
+        self.state.playback_state = playback_state;
+        match origin {
+            PlaybackChangeOrigin::Manual => {
+                if !paused && self.state.power_source == crate::power::PowerSource::Battery {
+                    self.state.auto_paused_for_battery = false;
+                    self.state.battery_pause_suppressed = true;
+                } else if paused {
+                    self.state.auto_paused_for_battery = false;
+                }
+            }
+            PlaybackChangeOrigin::Power => {}
+        }
+        self.bump_generation();
+        Ok(())
+    }
+
+    async fn apply_power_policy(&mut self) -> Result<(), BridgeError> {
+        if !self.state.app_config.power.pause_on_battery_power {
+            self.state.auto_paused_for_battery = false;
+            self.state.battery_pause_suppressed = false;
+            self.state.pending_battery_pause_after_initial_frame = false;
+            return Ok(());
+        }
+
+        match self.state.power_source {
+            crate::power::PowerSource::Battery => {
+                if self.state.playback_state == BridgePlaybackState::Playing
+                    && !self.state.battery_pause_suppressed
+                {
+                    if self.state.pending_battery_pause_after_initial_frame {
+                        return Ok(());
+                    }
+                    log::info!("pausing wallpaper playback on battery power");
+                    self.set_playback(
+                        BridgePlaybackState::Paused,
+                        true,
+                        PlaybackChangeOrigin::Power,
+                    )
+                    .await?;
+                    self.state.auto_paused_for_battery = true;
+                }
+            }
+            crate::power::PowerSource::External => {
+                self.state.battery_pause_suppressed = false;
+                self.state.pending_battery_pause_after_initial_frame = false;
+                if self.state.auto_paused_for_battery {
+                    log::info!("resuming wallpaper playback on external power");
+                    self.set_playback(
+                        BridgePlaybackState::Playing,
+                        false,
+                        PlaybackChangeOrigin::Power,
+                    )
+                    .await?;
+                    self.state.auto_paused_for_battery = false;
+                }
+            }
+            crate::power::PowerSource::Unknown => {}
+        }
+        Ok(())
+    }
+
     fn display_handle(
         &self,
         wallpaper_id: &str,
@@ -545,7 +622,6 @@ impl<E: EngineFacade + Clone> BridgeActor<E> {
             .reconcile_engine(app_config.clone(), wallpaper_configs)
             .await?;
         self.state.set_active_ids_from_scenes(&scenes);
-        self.state.playback_state = crate::api::BridgePlaybackState::Playing;
         Ok(())
     }
 
@@ -1883,6 +1959,71 @@ impl<E: EngineFacade + Clone> Message<SetLaunchAtLogin> for BridgeActor<E> {
     }
 }
 
+impl<E: EngineFacade + Clone> Message<SetPauseOnBatteryPower> for BridgeActor<E> {
+    type Reply = messages::SetPauseOnBatteryPowerReply;
+
+    async fn handle(
+        &mut self,
+        msg: SetPauseOnBatteryPower,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.state.app_config.power.pause_on_battery_power = msg.enabled;
+        if let Some(store) = &self.config_store {
+            store.save_app_config(&self.state.app_config)?;
+        }
+        if !msg.enabled {
+            self.state.auto_paused_for_battery = false;
+            self.state.battery_pause_suppressed = false;
+            self.state.pending_battery_pause_after_initial_frame = false;
+        }
+        self.apply_power_policy().await?;
+        self.bump_generation();
+        Ok(self.all_snapshots())
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetPowerSource> for BridgeActor<E> {
+    type Reply = messages::SetPowerSourceReply;
+
+    async fn handle(
+        &mut self,
+        msg: SetPowerSource,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if msg.initial_sample && self.state.startup_power_sample_received {
+            return Ok(self.all_snapshots());
+        }
+        if self.state.power_source != msg.source {
+            self.state.power_source = msg.source;
+            if msg.source == crate::power::PowerSource::Battery {
+                self.state.battery_pause_suppressed = false;
+            }
+        }
+        if msg.initial_sample {
+            self.state.apply_startup_power_source(msg.source);
+        }
+        self.apply_power_policy().await?;
+        Ok(self.all_snapshots())
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<InitialFrameReady> for BridgeActor<E> {
+    type Reply = messages::InitialFrameReadyReply;
+
+    async fn handle(
+        &mut self,
+        _msg: InitialFrameReady,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.state.initial_frame_ready = true;
+        if self.state.pending_battery_pause_after_initial_frame {
+            self.state.pending_battery_pause_after_initial_frame = false;
+            self.apply_power_policy().await?;
+        }
+        Ok(self.all_snapshots())
+    }
+}
+
 impl<E: EngineFacade + Clone> Message<EjectWallpaperFromDisplay> for BridgeActor<E> {
     type Reply = DelegatedReply<messages::EjectWallpaperFromDisplayReply>;
 
@@ -1954,12 +2095,8 @@ impl<E: EngineFacade + Clone> Message<SetGlobalPlayback> for BridgeActor<E> {
         msg: SetGlobalPlayback,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.engine
-            .set_all_paused(msg.paused)
-            .await
-            .map_err(|error| BridgeError::engine(error.to_string()))?;
-        self.state.playback_state = msg.playback_state;
-        self.bump_generation();
+        self.set_playback(msg.playback_state, msg.paused, PlaybackChangeOrigin::Manual)
+            .await?;
         Ok(self.all_snapshots())
     }
 }

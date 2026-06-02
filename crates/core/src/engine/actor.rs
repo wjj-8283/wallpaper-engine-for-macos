@@ -11,7 +11,7 @@ use crate::{
     DisplaySelector, EngineError, WallpaperAssignment,
     display::state::{DisplayKey, DisplayStateModel},
     engine::{
-        EngineSnapshotPublisher,
+        EngineSnapshotPublisher, FirstFrameCallback,
         messages::{self, Ping},
         runtime::{RuntimeRefreshJob, RuntimeRefreshMode, SceneRuntime},
         state::{DisplayRuntimeRecord, EngineState},
@@ -24,6 +24,7 @@ use crate::{
 pub struct EngineActor {
     #[allow(dead_code)]
     backend: OweBackend,
+    first_frame_callback: FirstFrameCallback,
     pub state: EngineState,
     snapshots: Arc<EngineSnapshotPublisher>,
     #[allow(dead_code)]
@@ -50,10 +51,11 @@ impl EngineActorHandle {
     #[allow(clippy::single_call_fn)]
     pub fn spawn(
         backend: OweBackend,
+        first_frame_callback: FirstFrameCallback,
         state: EngineState,
         snapshots: Arc<EngineSnapshotPublisher>,
     ) -> Result<Self, EngineError> {
-        let actor = EngineActor::new(backend, state, snapshots);
+        let actor = EngineActor::new(backend, first_frame_callback, state, snapshots);
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             if matches!(
@@ -102,11 +104,13 @@ impl EngineActorHandle {
 impl EngineActor {
     pub fn new(
         backend: OweBackend,
+        first_frame_callback: FirstFrameCallback,
         state: EngineState,
         snapshots: Arc<EngineSnapshotPublisher>,
     ) -> Self {
         Self {
             backend,
+            first_frame_callback,
             state,
             snapshots,
             display_callback: None,
@@ -397,6 +401,7 @@ impl EngineActor {
                 desc,
                 runtime_state,
                 existing_runtime,
+                first_frame_callback: self.first_frame_callback.clone(),
             });
         }
 
@@ -422,6 +427,7 @@ impl EngineActor {
             desc,
             runtime_state,
             existing_runtime,
+            first_frame_callback,
         } = job;
 
         let mut runtime = match existing_runtime {
@@ -471,7 +477,13 @@ impl EngineActor {
                                      error={reconfigure_error}",
                                     desc.display
                                 );
-                                match SceneRuntime::open(self.backend, &desc, runtime_state) {
+                                match SceneRuntime::open(
+                                    self.backend,
+                                    first_frame_callback.clone(),
+                                    handle,
+                                    &desc,
+                                    runtime_state,
+                                ) {
                                     Ok(replacement) => {
                                         if let Err(error) = runtime.close() {
                                             log::warn!(
@@ -507,7 +519,13 @@ impl EngineActor {
                     }
                 }
             }
-            None => match SceneRuntime::open(self.backend, &desc, runtime_state) {
+            None => match SceneRuntime::open(
+                self.backend,
+                first_frame_callback,
+                handle,
+                &desc,
+                runtime_state,
+            ) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     self.restore_failed_runtime_refresh(&key, handle, None)?;
@@ -951,7 +969,7 @@ mod tests {
             SceneRuntimeState::try_from(&previous_desc).expect("previous state should build"),
         ));
         let snapshots = Arc::new(EngineSnapshotPublisher::new(state.snapshot()));
-        let actor = EngineActor::new(OweBackend, state, snapshots);
+        let actor = EngineActor::new(OweBackend, Arc::new(|_handle| {}), state, snapshots);
         let runtime_state = actor
             .state
             .display_records

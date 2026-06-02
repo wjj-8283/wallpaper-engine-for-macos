@@ -209,6 +209,7 @@ pub struct BridgeSettingsSnapshot {
     pub displays: Vec<BridgeDisplaySettingsRow>,
     pub launch_at_login_available: bool,
     pub launch_at_login_enabled: bool,
+    pub pause_on_battery_power: bool,
     pub app_version: String,
     pub git_sha: String,
     pub bridge_version: String,

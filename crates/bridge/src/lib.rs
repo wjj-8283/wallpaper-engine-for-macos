@@ -12,8 +12,12 @@ pub mod library;
 pub mod logging;
 pub mod login;
 pub mod paths;
+mod power;
 pub mod project;
 pub mod state;
+
+#[doc(hidden)]
+pub use power::handle_power_change;
 
 #[cfg(test)]
 mod tests;

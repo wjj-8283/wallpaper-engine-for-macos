@@ -916,6 +916,23 @@
         }
       }
     },
+    "Pause wallpapers on battery" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause wallpapers on battery"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用电池供电时自动暂停壁纸播放"
+          }
+        }
+      }
+    },
     "Play" : {
       "localizations" : {
         "en" : {
@@ -944,6 +961,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "播放组件不可用"
+          }
+        }
+      }
+    },
+    "Power Settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Power Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电源设置"
           }
         }
       }
@@ -1275,23 +1309,6 @@
         }
       }
     },
-    "Updates not yet checked" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Updates not yet checked"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未检查更新"
-          }
-        }
-      }
-    },
     "Up to date" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1339,6 +1356,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本更新"
+          }
+        }
+      }
+    },
+    "Updates not yet checked" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates not yet checked"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未检查更新"
           }
         }
       }
@@ -1403,6 +1437,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wallpaper Engine"
+          }
+        }
+      }
+    },
+    "Wallpaper playback pauses when the device is running on battery power and resumes automatically when connected to a power source. Playback can also be resumed manually from the menu bar." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallpaper playback pauses when the device is running on battery power and resumes automatically when connected to a power source. Playback can also be resumed manually from the menu bar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用电池供电时，应用会自动暂停壁纸播放；你可以通过菜单栏手动恢复播放。设备接入电源后，壁纸播放会自动恢复。"
           }
         }
       }

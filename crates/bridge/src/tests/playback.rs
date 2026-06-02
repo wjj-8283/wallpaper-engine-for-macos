@@ -9,7 +9,7 @@ use std::{
 use arc_swap::ArcSwap;
 use futures_util::future::{BoxFuture, FutureExt};
 use wallpaper_core::{
-    DisplaySelector, DisplaySnapshotEntry, EngineError, WallpaperAssignment,
+    DisplaySelector, DisplaySnapshotEntry, EngineError, FirstFrameCallback, WallpaperAssignment,
     media::audio::AudioVolume,
     project::{ScalingMode, SceneDesc, SceneHandle, SceneResult},
 };
@@ -260,6 +260,8 @@ impl EngineFacade for FailingPlaybackEngine {
     ) -> BoxFuture<'static, Result<Option<SceneHandle>, EngineError>> {
         async move { Ok::<Option<SceneHandle>, EngineError>(None) }.boxed()
     }
+
+    fn set_first_frame_callback(&self, _callback: FirstFrameCallback) {}
 }
 
 #[derive(Clone, Default)]
@@ -433,4 +435,6 @@ impl EngineFacade for ShutdownEngine {
     ) -> BoxFuture<'static, Result<Option<SceneHandle>, EngineError>> {
         async move { Ok::<Option<SceneHandle>, EngineError>(None) }.boxed()
     }
+
+    fn set_first_frame_callback(&self, _callback: FirstFrameCallback) {}
 }

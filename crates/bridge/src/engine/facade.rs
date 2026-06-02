@@ -16,7 +16,8 @@ use futures_util::future::{BoxFuture, FutureExt};
 #[cfg(test)]
 use wallpaper_core::project::SceneTemplate;
 use wallpaper_core::{
-    DisplaySelector, DisplaySnapshotEntry, EngineError, WallpaperAssignment, WallpaperEngine,
+    DisplaySelector, DisplaySnapshotEntry, EngineError, FirstFrameCallback, WallpaperAssignment,
+    WallpaperEngine,
     media::audio::{
         AudioCaptureError, AudioFrameConsumer, AudioResponseController, AudioResponseEngine,
         AudioVolume, InterleavedStereoF32, PlatformAudioCaptureBackend,
@@ -53,6 +54,7 @@ pub trait EngineFacade: Send + Sync + 'static {
         selector: DisplaySelector,
         assignment: WallpaperAssignment,
     ) -> EngineFuture<Option<SceneHandle>>;
+    fn set_first_frame_callback(&self, callback: FirstFrameCallback);
 }
 
 #[derive(Clone)]
@@ -176,6 +178,10 @@ impl EngineFacade for RealEngineFacade {
     ) -> EngineFuture<Option<SceneHandle>> {
         let engine = self.engine.clone();
         async move { engine.set_wallpaper_for_display(selector, assignment).await }.boxed()
+    }
+
+    fn set_first_frame_callback(&self, callback: FirstFrameCallback) {
+        self.engine.set_first_frame_callback(callback);
     }
 }
 
@@ -314,6 +320,7 @@ pub struct FakeEngineFacade {
     reconcile_failure: Arc<ArcSwap<Option<String>>>,
     reconcile_block: Arc<SegQueue<ReconcileBlockGate>>,
     reconcile_done: Arc<SegQueue<Sender<()>>>,
+    first_frame_callback: Arc<ArcSwap<Option<FirstFrameCallback>>>,
 }
 
 #[cfg(test)]
@@ -552,6 +559,13 @@ impl FakeEngineFacade {
             }
             Some(next)
         });
+    }
+
+    pub fn trigger_first_frame(&self, handle: SceneHandle) {
+        let callback = self.first_frame_callback.load_full().as_ref().clone();
+        if let Some(callback) = callback {
+            callback(handle);
+        }
     }
 }
 
@@ -799,5 +813,9 @@ impl EngineFacade for FakeEngineFacade {
             Ok(Some(SceneHandle::new(99)))
         }
         .boxed()
+    }
+
+    fn set_first_frame_callback(&self, callback: FirstFrameCallback) {
+        self.first_frame_callback.store(Arc::new(Some(callback)));
     }
 }

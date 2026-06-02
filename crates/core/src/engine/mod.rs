@@ -11,6 +11,7 @@ use std::{
 };
 
 use actor::{EngineActor, EngineActorHandle};
+use arc_swap::ArcSwap;
 pub use config::{DisplayConfig, DisplaySelector, WallpaperAssignment, WallpaperEngineConfig};
 use objc2_app_kit::NSEvent;
 use objc2_foundation::NSPoint;
@@ -65,6 +66,7 @@ pub struct DisplaySnapshotEntry {
 #[derive(Clone)]
 pub struct WallpaperEngine {
     backend: OweBackend,
+    first_frame_callback: FirstFrameCallbackCell,
     snapshots: Arc<EngineSnapshotPublisher>,
     audio_response_resampler: Arc<std::sync::Mutex<AudioResponseResampler>>,
     mouse_buttons: Arc<Mutex<MouseButtonTracker>>,
@@ -75,6 +77,35 @@ pub struct WallpaperEngine {
     /// Owns callback registration and its target for the engine lifetime.
     #[allow(dead_code)]
     lifecycle: Arc<EngineLifecycle>,
+}
+
+pub type FirstFrameCallback = Arc<dyn Fn(SceneHandle) + Send + Sync + 'static>;
+
+#[derive(Clone)]
+struct FirstFrameCallbackCell {
+    callback: Arc<ArcSwap<FirstFrameCallback>>,
+}
+
+impl FirstFrameCallbackCell {
+    fn set(&self, callback: FirstFrameCallback) {
+        self.callback.store(Arc::new(callback));
+    }
+
+    fn callback(&self) -> FirstFrameCallback {
+        let cell = self.clone();
+        Arc::new(move |handle| {
+            let callback = cell.callback.load_full();
+            callback(handle);
+        })
+    }
+}
+
+impl Default for FirstFrameCallbackCell {
+    fn default() -> Self {
+        Self {
+            callback: Arc::new(ArcSwap::from_pointee(Arc::new(|_handle| {}))),
+        }
+    }
 }
 
 struct EngineLifecycle {
@@ -153,16 +184,23 @@ impl WallpaperEngine {
     /// or platform display callback cannot be initialized.
     pub fn with_config(config: WallpaperEngineConfig) -> Result<Self, EngineError> {
         let backend = OweBackend::initialize()?;
+        let first_frame_callback = FirstFrameCallbackCell::default();
         let model = DisplayStateModel::from_config(config)?;
         let actor_state = EngineState::with_display_model(model);
         let initial_snapshot = actor_state.snapshot();
         let snapshots = Arc::new(EngineSnapshotPublisher::new(initial_snapshot));
-        let actor = EngineActorHandle::spawn(backend, actor_state, Arc::clone(&snapshots))?;
+        let actor = EngineActorHandle::spawn(
+            backend,
+            first_frame_callback.callback(),
+            actor_state,
+            Arc::clone(&snapshots),
+        )?;
         let mouse_buttons = Arc::new(Mutex::new(MouseButtonTracker::new()));
         let mouse_event_monitor = Arc::new(Self::install_mouse_event_monitor(&mouse_buttons));
         let lifecycle = Arc::new(EngineLifecycle::new(&actor)?);
         let engine = Self {
             backend,
+            first_frame_callback,
             snapshots,
             audio_response_resampler: Arc::new(
                 std::sync::Mutex::new(AudioResponseResampler::new()),
@@ -173,6 +211,10 @@ impl WallpaperEngine {
             lifecycle,
         };
         Ok(engine)
+    }
+
+    pub fn set_first_frame_callback(&self, callback: FirstFrameCallback) {
+        self.first_frame_callback.set(callback);
     }
 
     #[cfg(test)]
@@ -280,8 +322,13 @@ impl WallpaperEngine {
         let snapshots = Arc::new(EngineSnapshotPublisher::new(
             EngineState::default().snapshot(),
         ));
-        let actor_handle = EngineActorHandle::spawn(OweBackend, EngineState::default(), snapshots)
-            .expect("test actor shell should start");
+        let actor_handle = EngineActorHandle::spawn(
+            OweBackend,
+            Arc::new(|_handle| {}),
+            EngineState::default(),
+            snapshots,
+        )
+        .expect("test actor shell should start");
         let actor = actor_handle.actor().clone();
         let _ = actor.stop_gracefully().await;
         actor.wait_for_shutdown().await;
@@ -817,8 +864,14 @@ mod tests {
         let state = EngineState::with_display_model(DisplayStateModel { records });
         let snapshot = state.snapshot();
         let snapshots = Arc::new(EngineSnapshotPublisher::new(snapshot));
-        let actor = EngineActorHandle::spawn(OweBackend, state, Arc::clone(&snapshots))
-            .expect("test actor shell should start");
+        let first_frame_callback = FirstFrameCallbackCell::default();
+        let actor = EngineActorHandle::spawn(
+            OweBackend,
+            first_frame_callback.callback(),
+            state,
+            Arc::clone(&snapshots),
+        )
+        .expect("test actor shell should start");
         let refresh_target = Arc::new(EngineRefreshTarget {
             actor: actor.actor().clone(),
         });
@@ -828,6 +881,7 @@ mod tests {
         });
         WallpaperEngine {
             backend: OweBackend,
+            first_frame_callback,
             snapshots,
             audio_response_resampler: Arc::new(
                 std::sync::Mutex::new(AudioResponseResampler::new()),
@@ -1510,7 +1564,7 @@ mod tests {
         };
 
         let snapshots = Arc::new(EngineSnapshotPublisher::new(state.snapshot()));
-        let mut actor = EngineActor::new(OweBackend, state, snapshots);
+        let mut actor = EngineActor::new(OweBackend, Arc::new(|_handle| {}), state, snapshots);
 
         actor
             .reconcile_display_descriptors(primary.clone(), vec![primary])
@@ -2082,7 +2136,7 @@ mod tests {
         record.model.runtime_open = false;
 
         let snapshots = Arc::new(EngineSnapshotPublisher::new(state.snapshot()));
-        let mut actor = EngineActor::new(OweBackend, state, snapshots);
+        let mut actor = EngineActor::new(OweBackend, Arc::new(|_handle| {}), state, snapshots);
 
         actor
             .set_all_paused(true)

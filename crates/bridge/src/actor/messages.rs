@@ -10,6 +10,7 @@ use crate::{
         BridgeWallpaperKind, BridgeWallpaperMutationBundle, BridgeWallpaperOptionsSnapshot,
     },
     config::{AppConfig, WallpaperConfig},
+    power::PowerSource,
 };
 
 pub struct Bootstrap;
@@ -171,6 +172,17 @@ pub struct SetLaunchAtLogin {
     pub enabled: bool,
 }
 
+pub struct SetPauseOnBatteryPower {
+    pub enabled: bool,
+}
+
+pub struct SetPowerSource {
+    pub source: PowerSource,
+    pub initial_sample: bool,
+}
+
+pub struct InitialFrameReady;
+
 pub struct EditProperty {
     pub wallpaper_id: String,
     pub property_id: String,
@@ -240,6 +252,9 @@ pub type SetMirrorVolumeReply = DisplayMutationReply;
 pub type SetMirrorMutedReply = DisplayMutationReply;
 pub type EjectWallpaperFromDisplayReply = DisplayMutationReply;
 pub type SetGlobalPlaybackReply = AllSnapshotsReply;
+pub type SetPauseOnBatteryPowerReply = AllSnapshotsReply;
+pub type SetPowerSourceReply = AllSnapshotsReply;
+pub type InitialFrameReadyReply = AllSnapshotsReply;
 pub type ShutdownReply = Result<(), BridgeError>;
 pub type WallpaperMutationReply = Result<BridgeWallpaperMutationBundle, crate::api::BridgeError>;
 pub type CommitApplyAfterReconcileReply = WallpaperMutationReply;

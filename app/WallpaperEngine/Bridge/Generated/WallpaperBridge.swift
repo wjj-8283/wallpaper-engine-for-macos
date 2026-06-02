@@ -661,8 +661,8 @@ public protocol WallpaperBridgeProtocol : AnyObject {
      * Returns an error when host pointer state cannot be forwarded to active
      * wallpaper scenes.
      */
-    func pollMousePosition() async throws
-
+    func pollMousePosition() async throws 
+    
     /**
      * # Errors
      *
@@ -795,6 +795,14 @@ public protocol WallpaperBridgeProtocol : AnyObject {
     /**
      * # Errors
      *
+     * Returns an error when the setting cannot be persisted or an immediate
+     * power-policy playback transition fails.
+     */
+    func setPauseOnBatteryPower(enabled: Bool) async throws  -> BridgeSnapshotBundle
+    
+    /**
+     * # Errors
+     *
      * Returns an error when the wallpaper or display id is unknown, or
      * persistence fails.
      */
@@ -914,7 +922,7 @@ open func allSnapshots()async throws  -> BridgeSnapshotBundle {
             rustFutureFunc: {
                 uniffi_wallpaper_bridge_fn_method_wallpaperbridge_all_snapshots(
                     self.uniffiClonePointer()
-
+                    
                 )
             },
             pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
@@ -924,7 +932,7 @@ open func allSnapshots()async throws  -> BridgeSnapshotBundle {
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-
+    
     /**
      * # Errors
      *
@@ -1268,6 +1276,7 @@ open func pollMousePosition()async throws  {
             rustFutureFunc: {
                 uniffi_wallpaper_bridge_fn_method_wallpaperbridge_poll_mouse_position(
                     self.uniffiClonePointer()
+                    
                 )
             },
             pollFunc: ffi_wallpaper_bridge_rust_future_poll_void,
@@ -1277,7 +1286,7 @@ open func pollMousePosition()async throws  {
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
-
+    
     /**
      * # Errors
      *
@@ -1658,6 +1667,29 @@ open func setMuted(wallpaperId: String, muted: Bool)async throws  -> BridgeWallp
             completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
             freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBridgeWallpaperMutationBundle.lift,
+            errorHandler: FfiConverterTypeBridgeError.lift
+        )
+}
+    
+    /**
+     * # Errors
+     *
+     * Returns an error when the setting cannot be persisted or an immediate
+     * power-policy playback transition fails.
+     */
+open func setPauseOnBatteryPower(enabled: Bool)async throws  -> BridgeSnapshotBundle {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_wallpaper_bridge_fn_method_wallpaperbridge_set_pause_on_battery_power(
+                    self.uniffiClonePointer(),
+                    FfiConverterBool.lower(enabled)
+                )
+            },
+            pollFunc: ffi_wallpaper_bridge_rust_future_poll_rust_buffer,
+            completeFunc: ffi_wallpaper_bridge_rust_future_complete_rust_buffer,
+            freeFunc: ffi_wallpaper_bridge_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBridgeSnapshotBundle.lift,
             errorHandler: FfiConverterTypeBridgeError.lift
         )
 }
@@ -2861,6 +2893,7 @@ public struct BridgeSettingsSnapshot {
     public var displays: [BridgeDisplaySettingsRow]
     public var launchAtLoginAvailable: Bool
     public var launchAtLoginEnabled: Bool
+    public var pauseOnBatteryPower: Bool
     public var appVersion: String
     public var gitSha: String
     public var bridgeVersion: String
@@ -2869,10 +2902,11 @@ public struct BridgeSettingsSnapshot {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displays: [BridgeDisplaySettingsRow], launchAtLoginAvailable: Bool, launchAtLoginEnabled: Bool, appVersion: String, gitSha: String, bridgeVersion: String, coreVersion: String, storage: BridgeStorageStatus) {
+    public init(displays: [BridgeDisplaySettingsRow], launchAtLoginAvailable: Bool, launchAtLoginEnabled: Bool, pauseOnBatteryPower: Bool, appVersion: String, gitSha: String, bridgeVersion: String, coreVersion: String, storage: BridgeStorageStatus) {
         self.displays = displays
         self.launchAtLoginAvailable = launchAtLoginAvailable
         self.launchAtLoginEnabled = launchAtLoginEnabled
+        self.pauseOnBatteryPower = pauseOnBatteryPower
         self.appVersion = appVersion
         self.gitSha = gitSha
         self.bridgeVersion = bridgeVersion
@@ -2892,6 +2926,9 @@ extension BridgeSettingsSnapshot: Equatable, Hashable {
             return false
         }
         if lhs.launchAtLoginEnabled != rhs.launchAtLoginEnabled {
+            return false
+        }
+        if lhs.pauseOnBatteryPower != rhs.pauseOnBatteryPower {
             return false
         }
         if lhs.appVersion != rhs.appVersion {
@@ -2916,6 +2953,7 @@ extension BridgeSettingsSnapshot: Equatable, Hashable {
         hasher.combine(displays)
         hasher.combine(launchAtLoginAvailable)
         hasher.combine(launchAtLoginEnabled)
+        hasher.combine(pauseOnBatteryPower)
         hasher.combine(appVersion)
         hasher.combine(gitSha)
         hasher.combine(bridgeVersion)
@@ -2935,6 +2973,7 @@ public struct FfiConverterTypeBridgeSettingsSnapshot: FfiConverterRustBuffer {
                 displays: FfiConverterSequenceTypeBridgeDisplaySettingsRow.read(from: &buf), 
                 launchAtLoginAvailable: FfiConverterBool.read(from: &buf), 
                 launchAtLoginEnabled: FfiConverterBool.read(from: &buf), 
+                pauseOnBatteryPower: FfiConverterBool.read(from: &buf), 
                 appVersion: FfiConverterString.read(from: &buf), 
                 gitSha: FfiConverterString.read(from: &buf), 
                 bridgeVersion: FfiConverterString.read(from: &buf), 
@@ -2947,6 +2986,7 @@ public struct FfiConverterTypeBridgeSettingsSnapshot: FfiConverterRustBuffer {
         FfiConverterSequenceTypeBridgeDisplaySettingsRow.write(value.displays, into: &buf)
         FfiConverterBool.write(value.launchAtLoginAvailable, into: &buf)
         FfiConverterBool.write(value.launchAtLoginEnabled, into: &buf)
+        FfiConverterBool.write(value.pauseOnBatteryPower, into: &buf)
         FfiConverterString.write(value.appVersion, into: &buf)
         FfiConverterString.write(value.gitSha, into: &buf)
         FfiConverterString.write(value.bridgeVersion, into: &buf)
@@ -4664,6 +4704,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_muted() != 46581) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_pause_on_battery_power() != 21085) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_wallpaper_bridge_checksum_method_wallpaperbridge_set_scaling_mode() != 14052) {

@@ -29,6 +29,12 @@ pub struct BridgeActorState {
     pub wallpaper_drafts: BTreeMap<String, WallpaperOptionsDraft>,
     pub project_models: BTreeMap<String, ProjectModel>,
     pub display_settings: BTreeMap<String, BridgeDisplaySettingsRow>,
+    pub power_source: crate::power::PowerSource,
+    pub auto_paused_for_battery: bool,
+    pub battery_pause_suppressed: bool,
+    pub startup_power_sample_received: bool,
+    pub initial_frame_ready: bool,
+    pub pending_battery_pause_after_initial_frame: bool,
     pub filter_scene: bool,
     pub filter_video: bool,
     pub filter_webpage: bool,
@@ -48,6 +54,12 @@ impl Default for BridgeActorState {
             wallpaper_drafts: BTreeMap::new(),
             project_models: BTreeMap::new(),
             display_settings: BTreeMap::new(),
+            power_source: crate::power::PowerSource::External,
+            auto_paused_for_battery: false,
+            battery_pause_suppressed: false,
+            startup_power_sample_received: false,
+            initial_frame_ready: false,
+            pending_battery_pause_after_initial_frame: false,
             filter_scene: true,
             filter_video: true,
             filter_webpage: true,
@@ -78,6 +90,15 @@ impl BridgeActorState {
             app_config,
             ..Self::default()
         }
+    }
+
+    pub fn apply_startup_power_source(&mut self, source: crate::power::PowerSource) {
+        self.power_source = source;
+        self.startup_power_sample_received = true;
+        self.pending_battery_pause_after_initial_frame = source
+            == crate::power::PowerSource::Battery
+            && self.app_config.power.pause_on_battery_power
+            && !self.initial_frame_ready;
     }
 
     pub fn filter_enabled(&self, kind: BridgeWallpaperKind) -> bool {

@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use serde_json::Value;
 
 use crate::{
     DisplayDesc, EngineError, WallpaperWindow,
     display::state::DisplayKey,
+    engine::FirstFrameCallback,
     media::audio::AudioVolume,
     owe::backend::{OweBackend, OweScene},
     project::{ScalingMode, SceneDesc, SceneHandle, SerdeValudeExt},
@@ -11,6 +14,10 @@ use crate::{
 pub struct SceneRuntime {
     /// Last descriptor used to configure the renderer scene.
     pub desc: SceneDesc,
+    /// Stable handle used when reporting renderer lifecycle events.
+    handle: SceneHandle,
+    /// Engine-level callback invoked after OWE renders the first frame.
+    first_frame_callback: FirstFrameCallback,
     /// Opaque Open Wallpaper Engine renderer object.
     renderer: OweScene,
     /// Runtime override applied after descriptor defaults.
@@ -67,6 +74,7 @@ pub struct RuntimeRefreshJob {
     pub desc: SceneDesc,
     pub runtime_state: SceneRuntimeState,
     pub existing_runtime: Option<SceneRuntime>,
+    pub first_frame_callback: FirstFrameCallback,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +113,8 @@ impl RuntimeRefreshMode {
 impl SceneRuntime {
     pub fn open(
         backend: OweBackend,
+        first_frame_callback: FirstFrameCallback,
+        handle: SceneHandle,
         desc: &SceneDesc,
         state: SceneRuntimeState,
     ) -> Result<Self, EngineError> {
@@ -117,10 +127,16 @@ impl SceneRuntime {
             state.scaling_mode,
             state.scaling_factor,
             state.render_resolution,
+            Some(Arc::new({
+                let callback = first_frame_callback.clone();
+                move || callback(handle)
+            })),
         )?;
         let descriptor_state = SceneRuntimeState::try_from(desc)?;
         let mut runtime = Self {
             desc: desc.clone(),
+            handle,
+            first_frame_callback,
             renderer,
             scaling_mode: state.scaling_mode,
             scaling_factor: state.scaling_factor,
@@ -206,6 +222,7 @@ impl SceneRuntime {
             inheritance,
         );
         let old_display = self.desc.display.clone();
+        let first_frame_callback = self.renderer_first_frame_callback();
         let window = self.window.as_mut().ok_or_else(|| {
             EngineError::Platform("wallpaper window is already closed".to_string())
         })?;
@@ -229,6 +246,7 @@ impl SceneRuntime {
             state.scaling_mode,
             state.scaling_factor,
             render_resolution,
+            Some(first_frame_callback),
         ) {
             Ok(renderer) => renderer,
             Err(error) => {
@@ -417,6 +435,14 @@ impl SceneRuntime {
     ) -> Result<(), EngineError> {
         let state = self.runtime_state();
         state.apply_to(&mut self.renderer, descriptor_state)
+    }
+
+    fn renderer_first_frame_callback(&self) -> crate::owe::backend::FirstFrameCallback {
+        Arc::new({
+            let callback = self.first_frame_callback.clone();
+            let handle = self.handle;
+            move || callback(handle)
+        })
     }
 }
 

@@ -33,6 +33,7 @@
 		0A1000010000000000000025 /* UpdateAvailableWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000010000000000000029 /* UpdateAvailableWindow.swift */; };
 		0A1000010000000000000026 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000010000000000000030 /* UpdateChecker.swift */; };
 		0A1000010000000000000027 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000010000000000000031 /* AppLog.swift */; };
+		0A1000010000000000000028 /* PowerSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000010000000000000032 /* PowerSettingsSection.swift */; };
 		843F72EB2FBDD0AD0068F8B7 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 843F72EA2FBDD0AD0068F8B7 /* InfoPlist.xcstrings */; };
 /* End PBXBuildFile section */
 
@@ -67,6 +68,7 @@
 		0A2000010000000000000029 /* UpdateAvailableWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateAvailableWindow.swift; sourceTree = "<group>"; };
 		0A2000010000000000000030 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		0A2000010000000000000031 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
+		0A2000010000000000000032 /* PowerSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerSettingsSection.swift; sourceTree = "<group>"; };
 		843F72EA2FBDD0AD0068F8B7 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -206,6 +208,7 @@
 			children = (
 				0A2000010000000000000021 /* SettingsView.swift */,
 				0A2000010000000000000027 /* ProgramSettingsSection.swift */,
+				0A2000010000000000000032 /* PowerSettingsSection.swift */,
 				0A2000010000000000000028 /* StorageFormat.swift */,
 				0A2000010000000000000029 /* UpdateAvailableWindow.swift */,
 				0A2000010000000000000022 /* DisplaySettingsSection.swift */,
@@ -319,6 +322,7 @@
 				0A1000010000000000000017 /* DisplayInformationView.swift in Sources */,
 				0A1000010000000000000018 /* SettingsView.swift in Sources */,
 				0A1000010000000000000023 /* ProgramSettingsSection.swift in Sources */,
+				0A1000010000000000000028 /* PowerSettingsSection.swift in Sources */,
 				0A1000010000000000000024 /* StorageFormat.swift in Sources */,
 				0A1000010000000000000025 /* UpdateAvailableWindow.swift in Sources */,
 				0A1000010000000000000019 /* DisplaySettingsSection.swift in Sources */,

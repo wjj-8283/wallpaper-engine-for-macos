@@ -178,6 +178,11 @@ final class BridgeStore {
         apply(bundle)
     }
 
+    func setPauseOnBatteryPowerAsync(enabled: Bool) async throws {
+        let bundle = try await bridge.setPauseOnBatteryPower(enabled: enabled)
+        apply(bundle)
+    }
+
     func applyWallpaperOptionsAsync(wallpaperId: String) async throws {
         let bundle = try await bridge.applyWallpaperOptions(wallpaperId: wallpaperId)
         apply(bundle)
@@ -262,6 +267,7 @@ final class BridgeStore {
                 displays: [],
                 launchAtLoginAvailable: false,
                 launchAtLoginEnabled: false,
+                pauseOnBatteryPower: false,
                 appVersion: "",
                 gitSha: "",
                 bridgeVersion: "",
