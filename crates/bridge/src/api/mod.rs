@@ -43,13 +43,12 @@ use crate::{
             EditProperty, EjectWallpaperFromDisplay, GetAllSnapshots, GetAppSnapshot,
             GetLibrarySnapshot, GetMonitorInformationSnapshot, GetSettingsSnapshot,
             GetWallpaperOptionsSnapshot, InitialFrameReady, PollMousePosition, RefreshDisplays,
-            RefreshLibrary, RestorePropertyDefault, SelectWallpaper, SetAudioResponseEnabled,
-            SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode, SetFilter,
-            SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
+            RefreshLibrary, RestorePropertyDefault, SelectWallpaper, SetAssetsDir,
+            SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode,
+            SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
             SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
-            SetPauseOnBatteryPower, SetPowerSource, InitialFrameReady,
-            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, Shutdown,
-            SetWorkshopDir, SetAssetsDir,
+            SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor, SetScalingMode, SetTargetFps,
+            SetVolume, SetWorkshopDir, Shutdown,
         },
         state::BridgeActorState,
     },
@@ -844,8 +843,6 @@ impl WallpaperBridge {
 
     /// # Errors
     ///
-    /// # Errors
-    ///
     /// Returns an error when the setting cannot be persisted or an immediate
     /// power-policy playback transition fails.
     pub async fn set_pause_on_battery_power(
@@ -859,22 +856,15 @@ impl WallpaperBridge {
     ///
     /// Returns an error when the directory cannot be set or the library
     /// cannot be rescanned.
-    pub async fn set_workshop_dir(
-        &self,
-        dir: String,
-    ) -> Result<BridgeSnapshotBundle, BridgeError> {
+    pub async fn set_workshop_dir(&self, dir: String) -> Result<BridgeSnapshotBundle, BridgeError> {
         self.actor.ask(SetWorkshopDir { dir }).await
     }
 
     /// # Errors
     ///
     /// Returns an error when the directory cannot be persisted.
-    pub async fn set_assets_dir(
-        &self,
-        dir: String,
-    ) -> Result<BridgeSnapshotBundle, BridgeError> {
+    pub async fn set_assets_dir(&self, dir: String) -> Result<BridgeSnapshotBundle, BridgeError> {
         self.actor.ask(SetAssetsDir { dir }).await
->>>>>>> 49a0e1f (允许自定义assets和壁纸存储目录)
     }
 
     /// # Errors
