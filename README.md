@@ -32,6 +32,8 @@
 
 ## 使用教程
 
+首先你需要有一份正版的 Wallpaper Engine 副本，本程序需要使用原版 Wallpaper Engine 的资源，程序不认除了 Steam 以外的安装路径。
+
 ### 1.获取壁纸和Assets
 
 #### 方法一：从Windows版本中复制

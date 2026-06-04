@@ -78,7 +78,7 @@ impl BridgePaths {
         }
         self.home.as_deref().map_or_else(
             || PathBuf::from("/missing/assets"),
-            |home| home.join("Library/Application Support/Steam/steamapps/common/Wallpaper Engine/assets"),
+            |home| home.join("Library/Application Support/Steam/steamapps/common/wallpaper_engine/assets"),
         )
     }
 
