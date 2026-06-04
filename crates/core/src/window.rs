@@ -465,6 +465,7 @@ impl WallpaperWindow {
         &mut self,
         html_path: &Path,
         initial_properties: Option<&wallpaper_web::Properties>,
+        initial_display: &wallpaper_web::InitialDisplayConfig,
     ) -> Result<(), EngineError> {
         let Some(handle) = self.handle.as_mut() else {
             return Err(EngineError::Platform(
@@ -475,10 +476,11 @@ impl WallpaperWindow {
         let html_path = html_path.to_path_buf();
         let read_access_root = PathBuf::from("/");
         let initial_properties = initial_properties.cloned();
+        let initial_display = initial_display.clone();
         let handle_ref = handle.clone_for_main_thread();
         let web_view_ptr = MainThread::dispatch(move || unsafe {
             handle_ref
-                .install_web_view(&html_path, &read_access_root, initial_properties.as_ref())
+                .install_web_view(&html_path, &read_access_root, initial_properties.as_ref(), &initial_display)
                 .map_err(web_error_to_engine)
         })?;
 
@@ -935,6 +937,7 @@ impl WindowHandleRef {
         html_path: &Path,
         read_access_root: &Path,
         initial_properties: Option<&wallpaper_web::Properties>,
+        initial_display: &wallpaper_web::InitialDisplayConfig,
     ) -> Result<SendPtr, wallpaper_web::WebError> {
         debug_assert!(NSThread::isMainThread_class());
 
@@ -945,6 +948,7 @@ impl WindowHandleRef {
                 html_path,
                 read_access_root,
                 initial_properties,
+                initial_display,
             )
         }?;
         Ok(SendPtr(web_view.as_ptr()))

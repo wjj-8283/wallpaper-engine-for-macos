@@ -18,6 +18,15 @@ use objc2_foundation::{NSString, NSThread, NSURL};
 use serde_json::Value;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Display settings that must be known before the page loads (cannot rely
+/// on `evaluateJavaScript` which fails silently until the page is ready).
+#[derive(Clone, Debug, Default)]
+pub struct InitialDisplayConfig {
+    pub horizontal_flip: bool,
+    pub scaling_mode: String,
+    pub scaling_factor: f64,
+    pub fps: u32,
+}
 
 #[derive(Debug)]
 pub enum WebError {
@@ -205,6 +214,7 @@ pub unsafe fn install_web_view(
     html_path: &Path,
     read_access_root: &Path,
     initial_properties: Option<&Properties>,
+    initial_display: &InitialDisplayConfig,
 ) -> Result<ObjcPtr, WebError> {
     debug_assert!(NSThread::isMainThread_class());
 
@@ -222,7 +232,7 @@ pub unsafe fn install_web_view(
     let config = unsafe { Retained::from_raw(config) }.ok_or_else(|| {
         WebError::Platform("WKWebViewConfiguration allocation returned null".to_string())
     })?;
-    unsafe { install_wallpaper_engine_user_script(&config, initial_properties) }?;
+    unsafe { install_wallpaper_engine_user_script(&config, initial_properties, initial_display) }?;
 
     let web_view: *mut AnyObject = unsafe { msg_send![web_view_class, alloc] };
     let web_view: *mut AnyObject =
@@ -254,6 +264,7 @@ pub unsafe fn install_web_view(
 unsafe fn install_wallpaper_engine_user_script(
     config: &AnyObject,
     initial_properties: Option<&Properties>,
+    initial_display: &InitialDisplayConfig,
 ) -> Result<(), WebError> {
     let controller_class = AnyClass::get(c"WKUserContentController").ok_or_else(|| {
         WebError::Platform("WebKit WKUserContentController class is unavailable".to_string())
@@ -307,23 +318,37 @@ unsafe fn install_wallpaper_engine_user_script(
   });
   window.__wallpaperDispatchProperties = applyProperties;
 
-  let currentScalingMode = "stretch";
-  let currentScalingFactor = 1.0;
+  let currentScalingMode = "__INITIAL_SCALING_MODE__";
+  let currentScalingFactor = __INITIAL_SCALING_FACTOR__;
+  let currentHorizontalFlip = __INITIAL_HORIZONTAL_FLIP__;
 
   function applyScaling() {
     const html = document.documentElement;
-    html.style.transformOrigin = "0 0";
-    if (currentScalingMode === "stretch" && Math.abs(currentScalingFactor - 1.0) < 0.001) {
-      html.style.transform = "";
+    const body = document.body;
+    const target = body && body.scrollWidth > 0 ? body : html;
+    target.style.setProperty("transform-origin", "0 0", "important");
+
+    const noScale = currentScalingMode === "stretch" && Math.abs(currentScalingFactor - 1.0) < 0.001;
+
+    if (noScale && !currentHorizontalFlip) {
+      target.style.setProperty("transform", "", "important");
+      html.style.setProperty("transform", "", "important");
       return;
     }
     if (currentScalingMode === "none" || currentScalingMode === "stretch") {
-      html.style.transform = "scale(" + currentScalingFactor + ")";
+      if (currentHorizontalFlip) {
+        target.style.setProperty(
+          "transform",
+          "scaleX(" + (-currentScalingFactor) + ") scaleY(" + currentScalingFactor + ") translateX(-100%)",
+          "important"
+        );
+      } else {
+        target.style.setProperty("transform", "scale(" + currentScalingFactor + ")", "important");
+      }
       return;
     }
-    const body = document.body;
-    const cw = body.scrollWidth || window.innerWidth;
-    const ch = body.scrollHeight || window.innerHeight;
+    const cw = (body && body.scrollWidth) || window.innerWidth;
+    const ch = (body && body.scrollHeight) || window.innerHeight;
     if (cw <= 0 || ch <= 0) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -336,9 +361,19 @@ unsafe fn install_wallpaper_engine_user_script(
       s = contentRatio > viewRatio ? vh / ch : vw / cw;
     }
     s *= currentScalingFactor;
-    const ox = (vw - cw * s) / 2;
-    const oy = (vh - ch * s) / 2;
-    html.style.transform = "translate(" + ox + "px, " + oy + "px) scale(" + s + ")";
+    if (currentHorizontalFlip) {
+      const ox = (vw + cw * s) / 2;
+      const oy = (vh - ch * s) / 2;
+      target.style.setProperty(
+        "transform",
+        "translate(" + ox + "px, " + oy + "px) scaleX(" + (-s) + ") scaleY(" + s + ")",
+        "important"
+      );
+    } else {
+      const ox = (vw - cw * s) / 2;
+      const oy = (vh - ch * s) / 2;
+      target.style.setProperty("transform", "translate(" + ox + "px, " + oy + "px) scale(" + s + ")", "important");
+    }
   }
 
   window.__wallpaperSetScalingMode = function(mode) {
@@ -349,8 +384,12 @@ unsafe fn install_wallpaper_engine_user_script(
     currentScalingFactor = factor;
     applyScaling();
   };
+  window.__wallpaperSetHorizontalFlip = function(enabled) {
+    currentHorizontalFlip = !!enabled;
+    applyScaling();
+  };
 
-  let targetFps = 0;
+  let targetFps = __INITIAL_FPS__;
   const origRAF = window.requestAnimationFrame;
   const origCAF = window.cancelAnimationFrame;
   let rafPending = [];
@@ -399,7 +438,11 @@ unsafe fn install_wallpaper_engine_user_script(
   else { window.addEventListener("load", applyScaling); }
 })();
 "#
-    .replace("__INITIAL_PROPERTIES__", &initial_properties);
+    .replace("__INITIAL_PROPERTIES__", &initial_properties)
+    .replace("__INITIAL_SCALING_MODE__", &initial_display.scaling_mode)
+    .replace("__INITIAL_SCALING_FACTOR__", &initial_display.scaling_factor.to_string())
+    .replace("__INITIAL_HORIZONTAL_FLIP__", if initial_display.horizontal_flip { "true" } else { "false" })
+    .replace("__INITIAL_FPS__", &initial_display.fps.to_string());
     let source = NSString::from_str(&source);
     let controller: *mut AnyObject = unsafe { msg_send![controller_class, new] };
     let controller = unsafe { Retained::from_raw(controller) }.ok_or_else(|| {
@@ -521,6 +564,12 @@ impl Runtime {
             "window.__wallpaperSetFps && window.__wallpaperSetFps({fps});"
         ))
     }
+
+    pub fn set_horizontal_flip(&self, enabled: bool) -> Result<(), WebError> {
+        self.property_dispatcher.evaluate_js(&format!(
+            "window.__wallpaperSetHorizontalFlip && window.__wallpaperSetHorizontalFlip({enabled});"
+        ))
+    }
 }
 
 impl Drop for Runtime {
@@ -596,12 +645,14 @@ unsafe fn dispatch_audio_frame_to_view(content_view: ObjcPtr, json: &str) {
 
 unsafe fn dispatch_properties_to_view(content_view: ObjcPtr, json: &str) {
     debug_assert!(NSThread::isMainThread_class());
-    evaluate_js_on_view(
-        content_view,
-        &format!(
-            "window.__wallpaperDispatchProperties && window.__wallpaperDispatchProperties({json});"
-        ),
-    );
+    unsafe {
+        evaluate_js_on_view(
+            content_view,
+            &format!(
+                "window.__wallpaperDispatchProperties && window.__wallpaperDispatchProperties({json});"
+            ),
+        );
+    }
 }
 
 unsafe fn evaluate_js_on_view(content_view: ObjcPtr, script: &str) {
