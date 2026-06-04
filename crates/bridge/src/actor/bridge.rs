@@ -32,7 +32,8 @@ use crate::{
             SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted,
             SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
             SetMirrorVolume, SetMuted, SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor,
-            SetScalingMode, SetTargetFps, SetVolume, Shutdown, SetDisplayHorizontalFlip,
+            SetScalingMode, SetTargetFps, SetVolume, Shutdown, SetDisplayHorizontalFlip, 
+            SetAssetsDir, SetWorkshopDir
         },
         state::BridgeActorState,
     },
