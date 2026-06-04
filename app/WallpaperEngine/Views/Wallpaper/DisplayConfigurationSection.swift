@@ -92,8 +92,8 @@ private struct DisplayConfigurationRow: View {
         _enabled = State(initialValue: row.enabled)
         _scalingMode = State(initialValue: row.scalingMode)
         _scalingFactorDraft = State(initialValue: Self.formattedScalingFactor(row.scalingFactor))
-        _horizontalOffset = State(initialValue: row.horizontalOffset)
-        _verticalOffset = State(initialValue: row.verticalOffset)
+        _horizontalOffset = State(initialValue: Self.clampedOffset(row.horizontalOffset))
+        _verticalOffset = State(initialValue: Self.clampedOffset(row.verticalOffset))
         _expanded = State(initialValue: !collapsible)
         _targetFps = State(initialValue: Double(Self.clampedTargetFps(row)))
         _muted = State(initialValue: row.muted)
@@ -283,8 +283,8 @@ private struct DisplayConfigurationRow: View {
         enabled = row.enabled
         scalingMode = row.scalingMode
         scalingFactorDraft = Self.formattedScalingFactor(row.scalingFactor)
-        horizontalOffset = row.horizontalOffset
-        verticalOffset = row.verticalOffset
+        horizontalOffset = Self.clampedOffset(row.horizontalOffset)
+        verticalOffset = Self.clampedOffset(row.verticalOffset)
         pendingScalingFactors.removeValue(forKey: row.displayId)
         invalidScalingFactorDisplayIds.remove(row.displayId)
         targetFps = Double(Self.clampedTargetFps(row))
@@ -298,6 +298,10 @@ private struct DisplayConfigurationRow: View {
 
     private static func clampedTargetFps(_ row: BridgeDisplayConfigRow) -> UInt32 {
         min(max(row.targetFps, 1), row.maxFps)
+    }
+
+    private static func clampedOffset(_ offset: Double) -> Double {
+        min(max(offset.rounded(), -150), 150)
     }
 
     private func commitScalingFactor() {
@@ -367,13 +371,13 @@ private struct DisplayConfigurationRow: View {
             HStack {
                 Text(title)
                 Spacer()
-                Text("\(Int(value.wrappedValue.rounded())) px")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                OffsetNumberField(value: value) {
+                    setOffset()
+                }
             }
             Slider(
                 value: value,
-                in: -1000...1000,
+                in: -150...150,
                 step: 1,
                 onEditingChanged: { editing in
                     if !editing {
@@ -426,6 +430,56 @@ private struct DisplayConfigurationRow: View {
             bridgeActionInProgress = false
             activeDisplayBridgeActionIds.remove(row.displayId)
         }
+    }
+}
+
+private struct OffsetNumberField: View {
+    @Binding var value: Double
+    let onCommit: () -> Void
+
+    @State private var draft: String
+    @FocusState private var focused: Bool
+
+    init(value: Binding<Double>, onCommit: @escaping () -> Void) {
+        _value = value
+        self.onCommit = onCommit
+        _draft = State(initialValue: Self.formatted(value.wrappedValue))
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField("", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
+                .frame(width: 64)
+                .focused($focused)
+                .onSubmit(commit)
+                .onChange(of: focused) { _, isFocused in
+                    if !isFocused {
+                        commit()
+                    }
+                }
+                .onChange(of: value) { _, updatedValue in
+                    if !focused {
+                        draft = Self.formatted(updatedValue)
+                    }
+                }
+            Text("px")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func commit() {
+        let parsed = Double(draft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? value
+        let clamped = min(max(parsed.rounded(), -150), 150)
+        value = clamped
+        draft = Self.formatted(clamped)
+        onCommit()
+    }
+
+    private static func formatted(_ value: Double) -> String {
+        Int(value.rounded()).formatted()
     }
 }
 
