@@ -47,8 +47,8 @@ use crate::{
             SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode,
             SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
             SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
-            SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor, SetScalingMode, SetTargetFps,
-            SetVolume, SetWorkshopDir, Shutdown,
+            SetPauseOnBatteryPower, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume,
+            Shutdown, SetDisplayHorizontalFlip,SetPowerSource, SetWorkshopDir, 
         },
         state::BridgeActorState,
     },
@@ -747,6 +747,23 @@ impl WallpaperBridge {
         mode: BridgeDisplayMode,
     ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
         self.actor.ask(SetDisplayMode { display_id, mode }).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the display id is unknown or the display update
+    /// fails.
+    pub async fn set_display_horizontal_flip(
+        &self,
+        display_id: String,
+        enabled: bool,
+    ) -> Result<BridgeDisplayMutationBundle, BridgeError> {
+        self.actor
+            .ask(SetDisplayHorizontalFlip {
+                display_id,
+                enabled,
+            })
+            .await
     }
 
     /// # Errors

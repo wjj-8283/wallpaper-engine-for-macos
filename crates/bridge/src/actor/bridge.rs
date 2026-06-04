@@ -28,11 +28,11 @@ use crate::{
             InjectSceneProjectForTest, InjectSceneWallpaperConfigForTest, InjectWallpaperForTest,
             PollMousePosition, ReconcileFailed, RefreshDisplays, RefreshLibrary,
             ReplaceLibraryForTest, ReplaceWallpaperConfigForTest, RestorePropertyDefault,
-            SelectWallpaper, SetAssetsDir, SetAudioResponseEnabled, SetDisplayConfigEnabled,
-            SetDisplayEnabled, SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin,
-            SetMirrorMuted, SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget,
-            SetMirrorTargetFps, SetMirrorVolume, SetMuted, SetPauseOnBatteryPower, SetPowerSource,
-            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, SetWorkshopDir, Shutdown,
+            SelectWallpaper, SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled,
+            SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted,
+            SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
+            SetMirrorVolume, SetMuted, SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor,
+            SetScalingMode, SetTargetFps, SetVolume, Shutdown, SetDisplayHorizontalFlip,
         },
         state::BridgeActorState,
     },
@@ -1437,6 +1437,7 @@ impl<E: EngineFacade + Clone> Message<InjectDisplayForTest> for BridgeActor<E> {
                 max_fps: 60,
                 muted: false,
                 volume: 1.0,
+                horizontal_flip: false,
             },
         );
         let ids = self
@@ -1693,6 +1694,37 @@ impl<E: EngineFacade + Clone> Message<SetDisplayMode> for BridgeActor<E> {
             }
         }
 
+        let display_settings = self.display_rows(&app_config, &displays);
+        reply_try!(Self::validate_display_settings(
+            &app_config,
+            &displays,
+            &display_settings,
+        ));
+        self.delegate_display(app_config, display_settings, ctx)
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetDisplayHorizontalFlip> for BridgeActor<E> {
+    type Reply = DelegatedReply<messages::SetDisplayHorizontalFlipReply>;
+
+    async fn handle(
+        &mut self,
+        msg: SetDisplayHorizontalFlip,
+        ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        macro_rules! reply_try {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => return ctx.reply(Err(error)),
+                }
+            };
+        }
+
+        let displays = self.engine.display_snapshot();
+        let selector = reply_try!(self.selector_for(&msg.display_id, &displays));
+        let mut app_config = self.normalized_config(&displays);
+        Self::monitor_settings_mut(&mut app_config, selector).horizontal_flip = msg.enabled;
         let display_settings = self.display_rows(&app_config, &displays);
         reply_try!(Self::validate_display_settings(
             &app_config,
