@@ -92,8 +92,8 @@ private struct DisplayConfigurationRow: View {
         _enabled = State(initialValue: row.enabled)
         _scalingMode = State(initialValue: row.scalingMode)
         _scalingFactorDraft = State(initialValue: Self.formattedScalingFactor(row.scalingFactor))
-        _horizontalOffset = State(initialValue: Self.clampedOffset(row.horizontalOffset))
-        _verticalOffset = State(initialValue: Self.clampedOffset(row.verticalOffset))
+        _horizontalOffset = State(initialValue: Self.roundedOffset(row.horizontalOffset))
+        _verticalOffset = State(initialValue: Self.roundedOffset(row.verticalOffset))
         _expanded = State(initialValue: !collapsible)
         _targetFps = State(initialValue: Double(Self.clampedTargetFps(row)))
         _muted = State(initialValue: row.muted)
@@ -283,8 +283,8 @@ private struct DisplayConfigurationRow: View {
         enabled = row.enabled
         scalingMode = row.scalingMode
         scalingFactorDraft = Self.formattedScalingFactor(row.scalingFactor)
-        horizontalOffset = Self.clampedOffset(row.horizontalOffset)
-        verticalOffset = Self.clampedOffset(row.verticalOffset)
+        horizontalOffset = Self.roundedOffset(row.horizontalOffset)
+        verticalOffset = Self.roundedOffset(row.verticalOffset)
         pendingScalingFactors.removeValue(forKey: row.displayId)
         invalidScalingFactorDisplayIds.remove(row.displayId)
         targetFps = Double(Self.clampedTargetFps(row))
@@ -300,8 +300,8 @@ private struct DisplayConfigurationRow: View {
         min(max(row.targetFps, 1), row.maxFps)
     }
 
-    private static func clampedOffset(_ offset: Double) -> Double {
-        min(max(offset.rounded(), -150), 150)
+    private static func roundedOffset(_ offset: Double) -> Double {
+        offset.rounded()
     }
 
     private func commitScalingFactor() {
@@ -472,9 +472,9 @@ private struct OffsetNumberField: View {
 
     private func commit() {
         let parsed = Double(draft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? value
-        let clamped = min(max(parsed.rounded(), -150), 150)
-        value = clamped
-        draft = Self.formatted(clamped)
+        let rounded = parsed.rounded()
+        value = rounded
+        draft = Self.formatted(rounded)
         onCommit()
     }
 
