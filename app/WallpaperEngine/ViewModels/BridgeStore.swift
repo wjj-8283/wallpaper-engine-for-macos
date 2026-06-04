@@ -114,6 +114,21 @@ final class BridgeStore {
         apply(bundle)
     }
 
+    func setOffsetAsync(
+        wallpaperId: String,
+        displayId: String,
+        horizontal: Double,
+        vertical: Double
+    ) async throws {
+        let bundle = try await bridge.setOffset(
+            wallpaperId: wallpaperId,
+            displayId: displayId,
+            horizontal: horizontal,
+            vertical: vertical
+        )
+        apply(bundle)
+    }
+
     func setTargetFpsAsync(wallpaperId: String, displayId: String, fps: UInt32) async throws {
         let bundle = try await bridge.setTargetFps(wallpaperId: wallpaperId, displayId: displayId, fps: fps)
         apply(bundle)

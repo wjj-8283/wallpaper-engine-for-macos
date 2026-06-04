@@ -480,7 +480,12 @@ impl WallpaperWindow {
         let handle_ref = handle.clone_for_main_thread();
         let web_view_ptr = MainThread::dispatch(move || unsafe {
             handle_ref
-                .install_web_view(&html_path, &read_access_root, initial_properties.as_ref(), &initial_display)
+                .install_web_view(
+                    &html_path,
+                    &read_access_root,
+                    initial_properties.as_ref(),
+                    &initial_display,
+                )
                 .map_err(web_error_to_engine)
         })?;
 

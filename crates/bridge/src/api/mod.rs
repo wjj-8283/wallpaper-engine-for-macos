@@ -44,11 +44,12 @@ use crate::{
             GetLibrarySnapshot, GetMonitorInformationSnapshot, GetSettingsSnapshot,
             GetWallpaperOptionsSnapshot, InitialFrameReady, PollMousePosition, RefreshDisplays,
             RefreshLibrary, RestorePropertyDefault, SelectWallpaper, SetAssetsDir,
-            SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled, SetDisplayMode,
-            SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
-            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
+            SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled,
+            SetDisplayHorizontalFlip, SetDisplayMode, SetFilter, SetGlobalPlayback,
+            SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor, SetMirrorScalingMode,
+            SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted, SetOffset,
             SetPauseOnBatteryPower, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume,
-            Shutdown, SetDisplayHorizontalFlip,SetPowerSource, SetWorkshopDir, 
+            SetWorkshopDir, Shutdown,
         },
         state::BridgeActorState,
     },
@@ -353,6 +354,15 @@ impl EngineFacade for ArcEngineFacade {
         factor: f64,
     ) -> Pin<Box<dyn Future<Output = Result<(), wallpaper_core::EngineError>> + Send>> {
         self.0.set_scaling_factor(handle, factor)
+    }
+
+    fn set_offset(
+        &self,
+        handle: SceneHandle,
+        horizontal: f64,
+        vertical: f64,
+    ) -> Pin<Box<dyn Future<Output = Result<(), wallpaper_core::EngineError>> + Send>> {
+        self.0.set_offset(handle, horizontal, vertical)
     }
 
     fn set_fps(
@@ -697,6 +707,23 @@ impl WallpaperBridge {
                 wallpaper_id,
                 display_id,
                 factor,
+            })
+            .await
+    }
+
+    pub async fn set_offset(
+        &self,
+        wallpaper_id: String,
+        display_id: String,
+        horizontal: f64,
+        vertical: f64,
+    ) -> Result<BridgeWallpaperMutationBundle, BridgeError> {
+        self.actor
+            .ask(SetOffset {
+                wallpaper_id,
+                display_id,
+                horizontal,
+                vertical,
             })
             .await
     }

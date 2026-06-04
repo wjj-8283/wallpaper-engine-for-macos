@@ -167,6 +167,13 @@ pub struct SetScalingFactor {
     pub factor: f64,
 }
 
+pub struct SetOffset {
+    pub wallpaper_id: String,
+    pub display_id: String,
+    pub horizontal: f64,
+    pub vertical: f64,
+}
+
 pub struct SetTargetFps {
     pub wallpaper_id: String,
     pub display_id: String,

@@ -25,6 +25,8 @@ pub struct InitialDisplayConfig {
     pub horizontal_flip: bool,
     pub scaling_mode: String,
     pub scaling_factor: f64,
+    pub horizontal_offset: f64,
+    pub vertical_offset: f64,
     pub fps: u32,
 }
 
@@ -320,6 +322,8 @@ unsafe fn install_wallpaper_engine_user_script(
 
   let currentScalingMode = "__INITIAL_SCALING_MODE__";
   let currentScalingFactor = __INITIAL_SCALING_FACTOR__;
+  let currentHorizontalOffset = __INITIAL_HORIZONTAL_OFFSET__;
+  let currentVerticalOffset = __INITIAL_VERTICAL_OFFSET__;
   let currentHorizontalFlip = __INITIAL_HORIZONTAL_FLIP__;
 
   function applyScaling() {
@@ -331,7 +335,7 @@ unsafe fn install_wallpaper_engine_user_script(
     const noScale = currentScalingMode === "stretch" && Math.abs(currentScalingFactor - 1.0) < 0.001;
 
     if (noScale && !currentHorizontalFlip) {
-      target.style.setProperty("transform", "", "important");
+      target.style.setProperty("transform", "translate(" + currentHorizontalOffset + "px, " + currentVerticalOffset + "px)", "important");
       html.style.setProperty("transform", "", "important");
       return;
     }
@@ -339,11 +343,11 @@ unsafe fn install_wallpaper_engine_user_script(
       if (currentHorizontalFlip) {
         target.style.setProperty(
           "transform",
-          "scaleX(" + (-currentScalingFactor) + ") scaleY(" + currentScalingFactor + ") translateX(-100%)",
+          "translate(" + currentHorizontalOffset + "px, " + currentVerticalOffset + "px) scaleX(" + (-currentScalingFactor) + ") scaleY(" + currentScalingFactor + ") translateX(-100%)",
           "important"
         );
       } else {
-        target.style.setProperty("transform", "scale(" + currentScalingFactor + ")", "important");
+        target.style.setProperty("transform", "translate(" + currentHorizontalOffset + "px, " + currentVerticalOffset + "px) scale(" + currentScalingFactor + ")", "important");
       }
       return;
     }
@@ -362,16 +366,16 @@ unsafe fn install_wallpaper_engine_user_script(
     }
     s *= currentScalingFactor;
     if (currentHorizontalFlip) {
-      const ox = (vw + cw * s) / 2;
-      const oy = (vh - ch * s) / 2;
+      const ox = (vw + cw * s) / 2 + currentHorizontalOffset;
+      const oy = (vh - ch * s) / 2 + currentVerticalOffset;
       target.style.setProperty(
         "transform",
         "translate(" + ox + "px, " + oy + "px) scaleX(" + (-s) + ") scaleY(" + s + ")",
         "important"
       );
     } else {
-      const ox = (vw - cw * s) / 2;
-      const oy = (vh - ch * s) / 2;
+      const ox = (vw - cw * s) / 2 + currentHorizontalOffset;
+      const oy = (vh - ch * s) / 2 + currentVerticalOffset;
       target.style.setProperty("transform", "translate(" + ox + "px, " + oy + "px) scale(" + s + ")", "important");
     }
   }
@@ -382,6 +386,11 @@ unsafe fn install_wallpaper_engine_user_script(
   };
   window.__wallpaperSetScalingFactor = function(factor) {
     currentScalingFactor = factor;
+    applyScaling();
+  };
+  window.__wallpaperSetOffset = function(horizontal, vertical) {
+    currentHorizontalOffset = horizontal;
+    currentVerticalOffset = vertical;
     applyScaling();
   };
   window.__wallpaperSetHorizontalFlip = function(enabled) {
@@ -441,6 +450,8 @@ unsafe fn install_wallpaper_engine_user_script(
     .replace("__INITIAL_PROPERTIES__", &initial_properties)
     .replace("__INITIAL_SCALING_MODE__", &initial_display.scaling_mode)
     .replace("__INITIAL_SCALING_FACTOR__", &initial_display.scaling_factor.to_string())
+    .replace("__INITIAL_HORIZONTAL_OFFSET__", &initial_display.horizontal_offset.to_string())
+    .replace("__INITIAL_VERTICAL_OFFSET__", &initial_display.vertical_offset.to_string())
     .replace("__INITIAL_HORIZONTAL_FLIP__", if initial_display.horizontal_flip { "true" } else { "false" })
     .replace("__INITIAL_FPS__", &initial_display.fps.to_string());
     let source = NSString::from_str(&source);
@@ -559,6 +570,12 @@ impl Runtime {
         ))
     }
 
+    pub fn set_offset(&self, horizontal: f64, vertical: f64) -> Result<(), WebError> {
+        self.property_dispatcher.evaluate_js(&format!(
+            "window.__wallpaperSetOffset && window.__wallpaperSetOffset({horizontal}, {vertical});"
+        ))
+    }
+
     pub fn set_fps(&self, fps: u32) -> Result<(), WebError> {
         self.property_dispatcher.evaluate_js(&format!(
             "window.__wallpaperSetFps && window.__wallpaperSetFps({fps});"
@@ -567,7 +584,8 @@ impl Runtime {
 
     pub fn set_horizontal_flip(&self, enabled: bool) -> Result<(), WebError> {
         self.property_dispatcher.evaluate_js(&format!(
-            "window.__wallpaperSetHorizontalFlip && window.__wallpaperSetHorizontalFlip({enabled});"
+            "window.__wallpaperSetHorizontalFlip && \
+             window.__wallpaperSetHorizontalFlip({enabled});"
         ))
     }
 }
@@ -649,7 +667,8 @@ unsafe fn dispatch_properties_to_view(content_view: ObjcPtr, json: &str) {
         evaluate_js_on_view(
             content_view,
             &format!(
-                "window.__wallpaperDispatchProperties && window.__wallpaperDispatchProperties({json});"
+                "window.__wallpaperDispatchProperties && \
+                 window.__wallpaperDispatchProperties({json});"
             ),
         );
     }

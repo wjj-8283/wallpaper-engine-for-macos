@@ -208,6 +208,15 @@ impl EngineFacade for FailingPlaybackEngine {
         async move { Ok::<(), EngineError>(()) }.boxed()
     }
 
+    fn set_offset(
+        &self,
+        _handle: SceneHandle,
+        _horizontal: f64,
+        _vertical: f64,
+    ) -> BoxFuture<'static, Result<(), EngineError>> {
+        async move { Ok::<(), EngineError>(()) }.boxed()
+    }
+
     fn set_fps(
         &self,
         _handle: SceneHandle,
@@ -379,6 +388,15 @@ impl EngineFacade for ShutdownEngine {
         &self,
         _handle: SceneHandle,
         _factor: f64,
+    ) -> BoxFuture<'static, Result<(), EngineError>> {
+        async move { Ok::<(), EngineError>(()) }.boxed()
+    }
+
+    fn set_offset(
+        &self,
+        _handle: SceneHandle,
+        _horizontal: f64,
+        _vertical: f64,
     ) -> BoxFuture<'static, Result<(), EngineError>> {
         async move { Ok::<(), EngineError>(()) }.boxed()
     }

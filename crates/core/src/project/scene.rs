@@ -240,6 +240,9 @@ pub struct SceneDesc {
     pub scaling_mode: ScalingMode,
     /// Initial positive wallpaper scaling factor.
     pub scaling_factor: f64,
+    /// Initial wallpaper translation in logical pixels.
+    pub horizontal_offset: f64,
+    pub vertical_offset: f64,
     /// Whether the final presentation should be mirrored left-to-right.
     pub horizontal_flip: bool,
     /// Whether the renderer should start in a paused state.
@@ -274,6 +277,8 @@ impl SceneDesc {
             fps: 60,
             scaling_mode: ScalingMode::default(),
             scaling_factor: 1.0,
+            horizontal_offset: 0.0,
+            vertical_offset: 0.0,
             horizontal_flip: false,
             paused: false,
             audio_response_enabled: false,
@@ -309,6 +314,8 @@ impl SceneDesc {
             fps,
             scaling_mode: ScalingMode::default(),
             scaling_factor: 1.0,
+            horizontal_offset: 0.0,
+            vertical_offset: 0.0,
             horizontal_flip: false,
             paused,
             audio_response_enabled: false,
@@ -456,6 +463,8 @@ impl SceneDesc {
             && self.fps == other.fps
             && self.scaling_mode == other.scaling_mode
             && (self.scaling_factor - other.scaling_factor).abs() <= f64::EPSILON
+            && (self.horizontal_offset - other.horizontal_offset).abs() <= f64::EPSILON
+            && (self.vertical_offset - other.vertical_offset).abs() <= f64::EPSILON
             && self.horizontal_flip == other.horizontal_flip
             && self.audio_response_enabled == other.audio_response_enabled
             && self.audio_volume == other.audio_volume
@@ -486,6 +495,8 @@ pub struct SceneTemplate {
     pub scaling_mode: ScalingMode,
     /// Initial positive wallpaper scaling factor.
     pub scaling_factor: f64,
+    pub horizontal_offset: f64,
+    pub vertical_offset: f64,
     /// Whether the final presentation should be mirrored left-to-right.
     pub horizontal_flip: bool,
     /// Whether the renderer should start in a paused state.
@@ -519,6 +530,8 @@ impl SceneTemplate {
             fps: 60,
             scaling_mode: ScalingMode::default(),
             scaling_factor: 1.0,
+            horizontal_offset: 0.0,
+            vertical_offset: 0.0,
             horizontal_flip: false,
             paused: false,
             audio_response_enabled: false,
@@ -539,6 +552,8 @@ impl SceneTemplate {
             fps: scene.fps,
             scaling_mode: scene.scaling_mode,
             scaling_factor: scene.scaling_factor,
+            horizontal_offset: scene.horizontal_offset,
+            vertical_offset: scene.vertical_offset,
             horizontal_flip: scene.horizontal_flip,
             paused: scene.paused,
             audio_response_enabled: scene.audio_response_enabled,
@@ -560,6 +575,8 @@ impl SceneTemplate {
             fps: self.fps,
             scaling_mode: self.scaling_mode,
             scaling_factor: self.scaling_factor,
+            horizontal_offset: self.horizontal_offset,
+            vertical_offset: self.vertical_offset,
             horizontal_flip: self.horizontal_flip,
             paused: self.paused,
             audio_response_enabled: self.audio_response_enabled,
@@ -605,6 +622,8 @@ pub struct SceneTemplateBuilder {
     fps: u32,
     scaling_mode: ScalingMode,
     scaling_factor: f64,
+    horizontal_offset: f64,
+    vertical_offset: f64,
     horizontal_flip: bool,
     paused: bool,
     audio_response_enabled: bool,
@@ -641,6 +660,13 @@ impl SceneTemplateBuilder {
     #[must_use]
     pub fn scaling_factor(mut self, scaling_factor: f64) -> Self {
         self.scaling_factor = scaling_factor;
+        self
+    }
+
+    #[must_use]
+    pub fn offset(mut self, horizontal: f64, vertical: f64) -> Self {
+        self.horizontal_offset = horizontal;
+        self.vertical_offset = vertical;
         self
     }
 
@@ -712,6 +738,8 @@ impl SceneTemplateBuilder {
             fps: self.fps,
             scaling_mode: self.scaling_mode,
             scaling_factor: self.scaling_factor,
+            horizontal_offset: self.horizontal_offset,
+            vertical_offset: self.vertical_offset,
             horizontal_flip: self.horizontal_flip,
             paused: self.paused,
             audio_response_enabled: self.audio_response_enabled,
@@ -791,6 +819,8 @@ pub struct SceneDescBuilder {
     fps: u32,
     scaling_mode: ScalingMode,
     scaling_factor: f64,
+    horizontal_offset: f64,
+    vertical_offset: f64,
     horizontal_flip: bool,
     paused: bool,
     audio_response_enabled: bool,
@@ -827,6 +857,13 @@ impl SceneDescBuilder {
     #[must_use]
     pub fn scaling_factor(mut self, scaling_factor: f64) -> Self {
         self.scaling_factor = scaling_factor;
+        self
+    }
+
+    #[must_use]
+    pub fn offset(mut self, horizontal: f64, vertical: f64) -> Self {
+        self.horizontal_offset = horizontal;
+        self.vertical_offset = vertical;
         self
     }
 
@@ -920,6 +957,8 @@ impl SceneDescBuilder {
             fps: self.fps,
             scaling_mode: self.scaling_mode,
             scaling_factor: self.scaling_factor,
+            horizontal_offset: self.horizontal_offset,
+            vertical_offset: self.vertical_offset,
             horizontal_flip: self.horizontal_flip,
             paused: self.paused,
             audio_response_enabled: self.audio_response_enabled,

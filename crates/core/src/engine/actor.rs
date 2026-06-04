@@ -208,6 +208,15 @@ impl EngineActor {
         self.with_scene_mut(handle, |scene| scene.set_scaling_factor(factor))
     }
 
+    pub fn set_offset(
+        &mut self,
+        handle: SceneHandle,
+        horizontal: f64,
+        vertical: f64,
+    ) -> Result<(), EngineError> {
+        self.with_scene_mut(handle, |scene| scene.set_offset(horizontal, vertical))
+    }
+
     pub fn set_fps(&mut self, handle: SceneHandle, fps: u32) -> Result<(), EngineError> {
         self.with_scene_mut(handle, |scene| scene.set_fps(fps))
     }
@@ -698,6 +707,20 @@ impl Message<messages::SetScalingFactor> for EngineActor {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.set_scaling_factor(msg.handle, msg.factor)?;
+        self.publish_snapshot();
+        Ok(())
+    }
+}
+
+impl Message<messages::SetOffset> for EngineActor {
+    type Reply = Result<(), EngineError>;
+
+    async fn handle(
+        &mut self,
+        msg: messages::SetOffset,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.set_offset(msg.handle, msg.horizontal, msg.vertical)?;
         self.publish_snapshot();
         Ok(())
     }

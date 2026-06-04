@@ -60,6 +60,8 @@ private struct DisplayConfigurationRow: View {
     @State private var enabled: Bool
     @State private var scalingMode: BridgeScalingMode
     @State private var scalingFactorDraft: String
+    @State private var horizontalOffset: Double
+    @State private var verticalOffset: Double
     @State private var expanded: Bool
     @State private var targetFps: Double
     @State private var muted: Bool
@@ -90,6 +92,8 @@ private struct DisplayConfigurationRow: View {
         _enabled = State(initialValue: row.enabled)
         _scalingMode = State(initialValue: row.scalingMode)
         _scalingFactorDraft = State(initialValue: Self.formattedScalingFactor(row.scalingFactor))
+        _horizontalOffset = State(initialValue: row.horizontalOffset)
+        _verticalOffset = State(initialValue: row.verticalOffset)
         _expanded = State(initialValue: !collapsible)
         _targetFps = State(initialValue: Double(Self.clampedTargetFps(row)))
         _muted = State(initialValue: row.muted)
@@ -196,6 +200,16 @@ private struct DisplayConfigurationRow: View {
             }
             .disabled(!enabled || bridgeActionInProgress)
 
+            offsetControl(
+                title: "Horizontal Offset",
+                value: $horizontalOffset
+            )
+
+            offsetControl(
+                title: "Vertical Offset",
+                value: $verticalOffset
+            )
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Target Frame Rate")
@@ -269,6 +283,8 @@ private struct DisplayConfigurationRow: View {
         enabled = row.enabled
         scalingMode = row.scalingMode
         scalingFactorDraft = Self.formattedScalingFactor(row.scalingFactor)
+        horizontalOffset = row.horizontalOffset
+        verticalOffset = row.verticalOffset
         pendingScalingFactors.removeValue(forKey: row.displayId)
         invalidScalingFactorDisplayIds.remove(row.displayId)
         targetFps = Double(Self.clampedTargetFps(row))
@@ -343,6 +359,40 @@ private struct DisplayConfigurationRow: View {
                 fps: fps
             )
             targetFps = Double(fps)
+        }
+    }
+
+    private func offsetControl(title: LocalizedStringKey, value: Binding<Double>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(Int(value.wrappedValue.rounded())) px")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Slider(
+                value: value,
+                in: -1000...1000,
+                step: 1,
+                onEditingChanged: { editing in
+                    if !editing {
+                        setOffset()
+                    }
+                }
+            )
+        }
+        .disabled(!enabled || bridgeActionInProgress)
+    }
+
+    private func setOffset() {
+        performAsyncBridgeAction {
+            try await store.setOffsetAsync(
+                wallpaperId: wallpaperId,
+                displayId: row.displayId,
+                horizontal: horizontalOffset,
+                vertical: verticalOffset
+            )
         }
     }
 

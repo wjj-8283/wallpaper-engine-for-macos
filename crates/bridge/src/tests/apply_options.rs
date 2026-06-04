@@ -494,12 +494,20 @@ async fn scaling_and_fps_option_edits_apply_to_active_scene_without_reconcile() 
         .set_target_fps("100".to_string(), "7".to_string(), 30)
         .await
         .unwrap();
+    bridge
+        .set_offset("100".to_string(), "7".to_string(), 120.0, -45.0)
+        .await
+        .unwrap();
 
     assert_eq!(
         engine.scaling_mode_calls(),
         vec![(SceneHandle::new(42), ScalingMode::Fill)]
     );
     assert_eq!(engine.fps_calls(), vec![(SceneHandle::new(42), 30)]);
+    assert_eq!(
+        engine.offset_calls(),
+        vec![(SceneHandle::new(42), 120.0, -45.0)]
+    );
 
     let options = bridge
         .wallpaper_options_snapshot("100".to_string())
@@ -511,6 +519,8 @@ async fn scaling_and_fps_option_edits_apply_to_active_scene_without_reconcile() 
         BridgeScalingMode::Fill
     );
     assert_eq!(options.display_configurations[0].target_fps, 30);
+    assert_f64_close(options.display_configurations[0].horizontal_offset, 120.0);
+    assert_f64_close(options.display_configurations[0].vertical_offset, -45.0);
 
     bridge
         .apply_wallpaper_options("100".to_string())

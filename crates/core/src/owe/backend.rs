@@ -83,6 +83,7 @@ impl OweBackend {
         scene.set_first_frame_callback(first_frame_callback)?;
         scene.set_scaling_mode(scaling_mode)?;
         scene.set_scaling_factor(scaling_factor)?;
+        scene.set_offset(desc.horizontal_offset, desc.vertical_offset)?;
         scene.set_horizontal_flip(desc.horizontal_flip)?;
         Ok(scene)
     }
@@ -184,6 +185,18 @@ impl OweScene {
     pub fn scaling_factor() -> Result<*const c_char, EngineError> {
         Self::property_name("owe_property_scaling_factor", || unsafe {
             sys::owe_property_scaling_factor()
+        })
+    }
+
+    pub fn horizontal_offset() -> Result<*const c_char, EngineError> {
+        Self::property_name("owe_property_horizontal_offset", || unsafe {
+            sys::owe_property_horizontal_offset()
+        })
+    }
+
+    pub fn vertical_offset() -> Result<*const c_char, EngineError> {
+        Self::property_name("owe_property_vertical_offset", || unsafe {
+            sys::owe_property_vertical_offset()
         })
     }
 
@@ -408,7 +421,14 @@ impl OweScene {
         self.set_property_float(Self::scaling_factor()?, factor as f32)
     }
 
-    /// Sets whether the renderer should mirror final presentation left-to-right.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn set_offset(&mut self, horizontal: f64, vertical: f64) -> Result<(), EngineError> {
+        self.set_property_float(Self::horizontal_offset()?, horizontal as f32)?;
+        self.set_property_float(Self::vertical_offset()?, vertical as f32)
+    }
+
+    /// Sets whether the renderer should mirror final presentation
+    /// left-to-right.
     ///
     /// # Errors
     ///

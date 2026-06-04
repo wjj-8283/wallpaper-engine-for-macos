@@ -53,6 +53,12 @@ pub struct SetScalingFactor {
     pub factor: f64,
 }
 
+pub struct SetOffset {
+    pub handle: SceneHandle,
+    pub horizontal: f64,
+    pub vertical: f64,
+}
+
 pub struct SetFps {
     pub handle: SceneHandle,
     pub fps: u32,

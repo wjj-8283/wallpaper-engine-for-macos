@@ -27,6 +27,8 @@ pub struct SceneRuntime {
     scaling_mode: ScalingMode,
     /// Runtime override applied after descriptor defaults.
     scaling_factor: f64,
+    horizontal_offset: f64,
+    vertical_offset: f64,
     /// Renderer-surface override. Changing this rebuilds the renderer object.
     render_resolution: Option<(u32, u32)>,
     /// Runtime audio-response state, preserved across scene reconciliation.
@@ -85,6 +87,8 @@ pub struct SceneRuntimeState {
     /// Mutable state that should survive replacing the scene descriptor.
     pub scaling_mode: ScalingMode,
     pub scaling_factor: f64,
+    pub horizontal_offset: f64,
+    pub vertical_offset: f64,
     pub render_resolution: Option<(u32, u32)>,
     pub audio_response_enabled: bool,
     pub paused: bool,
@@ -170,6 +174,8 @@ impl SceneRuntime {
                 horizontal_flip: desc.horizontal_flip,
                 scaling_mode: desc.scaling_mode.to_string(),
                 scaling_factor: desc.scaling_factor,
+                horizontal_offset: desc.horizontal_offset,
+                vertical_offset: desc.vertical_offset,
                 fps: desc.fps,
             };
             window.install_web_view(&web_entry, Some(&web_properties), &initial_display)?;
@@ -190,6 +196,8 @@ impl SceneRuntime {
                 content: RuntimeContent::Web(web_runtime),
                 scaling_mode: state.scaling_mode,
                 scaling_factor: state.scaling_factor,
+                horizontal_offset: state.horizontal_offset,
+                vertical_offset: state.vertical_offset,
                 render_resolution: state.render_resolution,
                 audio_response_enabled: state.audio_response_enabled,
                 paused: state.paused,
@@ -224,6 +232,8 @@ impl SceneRuntime {
             content: RuntimeContent::Scene(renderer),
             scaling_mode: state.scaling_mode,
             scaling_factor: state.scaling_factor,
+            horizontal_offset: state.horizontal_offset,
+            vertical_offset: state.vertical_offset,
             render_resolution: state.render_resolution,
             audio_response_enabled: state.audio_response_enabled,
             paused: state.paused,
@@ -258,6 +268,20 @@ impl SceneRuntime {
         }
         self.scaling_factor = factor;
         self.desc.scaling_factor = factor;
+        Ok(())
+    }
+
+    pub fn set_offset(&mut self, horizontal: f64, vertical: f64) -> Result<(), EngineError> {
+        match &mut self.content {
+            RuntimeContent::Scene(renderer) => renderer.set_offset(horizontal, vertical)?,
+            RuntimeContent::Web(runtime) => runtime
+                .set_offset(horizontal, vertical)
+                .map_err(web_error_to_engine)?,
+        }
+        self.horizontal_offset = horizontal;
+        self.vertical_offset = vertical;
+        self.desc.horizontal_offset = horizontal;
+        self.desc.vertical_offset = vertical;
         Ok(())
     }
 
@@ -397,6 +421,8 @@ impl SceneRuntime {
         self.desc = stored_desc;
         self.scaling_mode = state.scaling_mode;
         self.scaling_factor = state.scaling_factor;
+        self.horizontal_offset = state.horizontal_offset;
+        self.vertical_offset = state.vertical_offset;
         self.render_resolution = render_resolution;
         self.audio_response_enabled = state.audio_response_enabled;
         self.audio_volume = state.audio_volume;
@@ -588,6 +614,8 @@ impl SceneRuntime {
         SceneRuntimeState {
             scaling_mode: self.scaling_mode,
             scaling_factor: self.scaling_factor,
+            horizontal_offset: self.horizontal_offset,
+            vertical_offset: self.vertical_offset,
             render_resolution: self.render_resolution,
             audio_response_enabled: self.audio_response_enabled,
             paused: self.paused,
@@ -633,7 +661,12 @@ impl SceneRuntime {
                 runtime
                     .set_scaling_factor(self.desc.scaling_factor)
                     .map_err(web_error_to_engine)?;
-                runtime.set_fps(self.desc.fps).map_err(web_error_to_engine)?;
+                runtime
+                    .set_offset(self.desc.horizontal_offset, self.desc.vertical_offset)
+                    .map_err(web_error_to_engine)?;
+                runtime
+                    .set_fps(self.desc.fps)
+                    .map_err(web_error_to_engine)?;
                 runtime
                     .set_horizontal_flip(self.desc.horizontal_flip)
                     .map_err(web_error_to_engine)?;
@@ -694,6 +727,11 @@ impl SceneRuntimeState {
         if self.audio_muted != descriptor_state.audio_muted {
             renderer.set_audio_muted(self.audio_muted)?;
         }
+        if self.horizontal_offset != descriptor_state.horizontal_offset
+            || self.vertical_offset != descriptor_state.vertical_offset
+        {
+            renderer.set_offset(self.horizontal_offset, self.vertical_offset)?;
+        }
         match self.property_override_update(descriptor_state) {
             PropertyOverrideUpdate::Unchanged => {}
             PropertyOverrideUpdate::Apply(json) => renderer.set_property_override(json)?,
@@ -739,6 +777,8 @@ impl SceneRuntimeState {
         if inheritance == DescriptorInheritance::UseDescriptorDefaults {
             self.scaling_mode = next_descriptor_state.scaling_mode;
             self.scaling_factor = next_descriptor_state.scaling_factor;
+            self.horizontal_offset = next_descriptor_state.horizontal_offset;
+            self.vertical_offset = next_descriptor_state.vertical_offset;
             self.audio_response_enabled = next_descriptor_state.audio_response_enabled;
             self.audio_volume = next_descriptor_state.audio_volume;
             self.audio_muted = next_descriptor_state.audio_muted;
@@ -755,6 +795,8 @@ impl TryFrom<&SceneDesc> for SceneRuntimeState {
         Ok(Self {
             scaling_mode: desc.scaling_mode,
             scaling_factor: desc.scaling_factor,
+            horizontal_offset: desc.horizontal_offset,
+            vertical_offset: desc.vertical_offset,
             render_resolution: None,
             audio_response_enabled: desc.audio_response_enabled,
             paused: desc.paused,
@@ -978,6 +1020,8 @@ mod tests {
         SceneRuntimeState {
             scaling_mode: ScalingMode::Fit,
             scaling_factor: 1.0,
+            horizontal_offset: 0.0,
+            vertical_offset: 0.0,
             render_resolution: None,
             audio_response_enabled: true,
             paused: false,

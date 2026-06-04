@@ -28,12 +28,12 @@ use crate::{
             InjectSceneProjectForTest, InjectSceneWallpaperConfigForTest, InjectWallpaperForTest,
             PollMousePosition, ReconcileFailed, RefreshDisplays, RefreshLibrary,
             ReplaceLibraryForTest, ReplaceWallpaperConfigForTest, RestorePropertyDefault,
-            SelectWallpaper, SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled,
-            SetDisplayMode, SetFilter, SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted,
-            SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
-            SetMirrorVolume, SetMuted, SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor,
-            SetScalingMode, SetTargetFps, SetVolume, Shutdown, SetDisplayHorizontalFlip, 
-            SetAssetsDir, SetWorkshopDir
+            SelectWallpaper, SetAssetsDir, SetAudioResponseEnabled, SetDisplayConfigEnabled,
+            SetDisplayEnabled, SetDisplayHorizontalFlip, SetDisplayMode, SetFilter,
+            SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
+            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
+            SetOffset, SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor, SetScalingMode,
+            SetTargetFps, SetVolume, SetWorkshopDir, Shutdown,
         },
         state::BridgeActorState,
     },
@@ -2357,6 +2357,32 @@ impl<E: EngineFacade + Clone> Message<SetScalingFactor> for BridgeActor<E> {
         if let Some(handle) = self.display_handle(&msg.wallpaper_id, &selector) {
             self.engine
                 .set_scaling_factor(handle, msg.factor)
+                .await
+                .map_err(|error| BridgeError::engine(error.to_string()))?;
+        }
+        self.bump_generation();
+        self.wallpaper_bundle(msg.wallpaper_id)
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetOffset> for BridgeActor<E> {
+    type Reply = messages::WallpaperMutationReply;
+
+    async fn handle(
+        &mut self,
+        msg: SetOffset,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let displays = self.engine.display_snapshot();
+        let selector = self.selector_for(&msg.display_id, &displays)?;
+        let wallpaper_config = self
+            .state
+            .wallpaper_draft_mut(&msg.wallpaper_id)?
+            .set_offset(selector.clone(), msg.horizontal, msg.vertical)?;
+        self.save_wallpaper(msg.wallpaper_id.clone(), wallpaper_config)?;
+        if let Some(handle) = self.display_handle(&msg.wallpaper_id, &selector) {
+            self.engine
+                .set_offset(handle, msg.horizontal, msg.vertical)
                 .await
                 .map_err(|error| BridgeError::engine(error.to_string()))?;
         }

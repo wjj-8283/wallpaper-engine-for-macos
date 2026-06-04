@@ -86,6 +86,10 @@ pub struct MonitorRender {
     pub scaling_mode: String,
     #[serde(default = "default_scaling_factor")]
     pub scaling_factor: f64,
+    #[serde(default)]
+    pub horizontal_offset: f64,
+    #[serde(default)]
+    pub vertical_offset: f64,
     #[serde(default = "default_fps")]
     pub fps: u32,
 }
@@ -96,6 +100,8 @@ impl Default for MonitorRender {
             selector: SerializedSelector::default(),
             scaling_mode: default_scaling_mode(),
             scaling_factor: default_scaling_factor(),
+            horizontal_offset: 0.0,
+            vertical_offset: 0.0,
             fps: default_fps(),
         }
     }

@@ -261,6 +261,8 @@ impl SceneDescBuilderExt for SceneDescBuilder {
             .map(crate::config::wallpaper::MonitorRender::parse_scaling_mode)
             .unwrap_or_default();
         let scaling_factor = render_override.map_or(1.0, |render| render.scaling_factor);
+        let horizontal_offset = render_override.map_or(0.0, |render| render.horizontal_offset);
+        let vertical_offset = render_override.map_or(0.0, |render| render.vertical_offset);
         let supports_property_overrides = context.wallpaper.r#type.eq_ignore_ascii_case("scene")
             || context.wallpaper.r#type.eq_ignore_ascii_case("web");
         let property_override_json =
@@ -282,6 +284,7 @@ impl SceneDescBuilderExt for SceneDescBuilder {
             .paused(context.paused)
             .scaling_mode(scaling_mode)
             .scaling_factor(scaling_factor)
+            .offset(horizontal_offset, vertical_offset)
             .audio_response_enabled(context.wallpaper.audio.response_enabled)
             .audio_volume(audio_volume.into())
             .audio_muted(context.wallpaper.audio.muted)

@@ -141,6 +141,8 @@ impl BridgeActorState {
                         ScalingMode::Fill => BridgeScalingMode::Fill,
                     },
                     scaling_factor: render.scaling_factor,
+                    horizontal_offset: render.horizontal_offset,
+                    vertical_offset: render.vertical_offset,
                     target_fps: render.fps.min(max_fps),
                     max_fps,
                     muted: config.audio.muted,

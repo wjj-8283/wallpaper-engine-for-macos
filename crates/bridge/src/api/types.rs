@@ -103,6 +103,8 @@ pub struct BridgeDisplayConfigRow {
     pub enabled: bool,
     pub scaling_mode: BridgeScalingMode,
     pub scaling_factor: f64,
+    pub horizontal_offset: f64,
+    pub vertical_offset: f64,
     pub target_fps: u32,
     pub max_fps: u32,
     pub muted: bool,

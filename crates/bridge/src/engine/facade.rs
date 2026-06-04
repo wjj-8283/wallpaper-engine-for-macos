@@ -39,6 +39,7 @@ pub trait EngineFacade: Send + Sync + 'static {
     fn set_audio_capture_enabled(&self, handle: SceneHandle, enabled: bool) -> EngineFuture<()>;
     fn set_scaling_mode(&self, handle: SceneHandle, mode: ScalingMode) -> EngineFuture<()>;
     fn set_scaling_factor(&self, handle: SceneHandle, factor: f64) -> EngineFuture<()>;
+    fn set_offset(&self, handle: SceneHandle, horizontal: f64, vertical: f64) -> EngineFuture<()>;
     fn set_fps(&self, handle: SceneHandle, fps: u32) -> EngineFuture<()>;
     fn poll_mouse_position(&self) -> EngineFuture<()>;
     fn set_mouse_position(&self, handle: SceneHandle, x: f64, y: f64) -> EngineFuture<()>;
@@ -131,6 +132,11 @@ impl EngineFacade for RealEngineFacade {
     fn set_scaling_factor(&self, handle: SceneHandle, factor: f64) -> EngineFuture<()> {
         let engine = self.engine.clone();
         async move { engine.set_scaling_factor(handle, factor).await }.boxed()
+    }
+
+    fn set_offset(&self, handle: SceneHandle, horizontal: f64, vertical: f64) -> EngineFuture<()> {
+        let engine = self.engine.clone();
+        async move { engine.set_offset(handle, horizontal, vertical).await }.boxed()
     }
 
     fn set_fps(&self, handle: SceneHandle, fps: u32) -> EngineFuture<()> {
@@ -309,6 +315,7 @@ pub struct FakeEngineFacade {
     audio_capture_block: Arc<SegQueue<ReconcileBlockGate>>,
     scaling_mode_calls: Arc<ArcSwap<Vec<(SceneHandle, ScalingMode)>>>,
     scaling_factor_calls: Arc<ArcSwap<Vec<(SceneHandle, f64)>>>,
+    offset_calls: Arc<ArcSwap<Vec<(SceneHandle, f64, f64)>>>,
     fps_calls: Arc<ArcSwap<Vec<(SceneHandle, u32)>>>,
     mouse_poll_calls: Arc<ArcSwap<Vec<()>>>,
     mouse_poll_block: Arc<SegQueue<ReconcileBlockGate>>,
@@ -429,6 +436,11 @@ impl FakeEngineFacade {
     #[must_use]
     pub fn scaling_factor_calls(&self) -> Vec<(SceneHandle, f64)> {
         load_log(&self.scaling_factor_calls)
+    }
+
+    #[must_use]
+    pub fn offset_calls(&self) -> Vec<(SceneHandle, f64, f64)> {
+        load_log(&self.offset_calls)
     }
 
     #[must_use]
@@ -718,6 +730,23 @@ impl EngineFacade for FakeEngineFacade {
             });
             fake.update_direct_assignment_after_refresh(handle, |template| {
                 template.scaling_factor = factor;
+            });
+            Ok(())
+        }
+        .boxed()
+    }
+
+    fn set_offset(&self, handle: SceneHandle, horizontal: f64, vertical: f64) -> EngineFuture<()> {
+        let fake = self.clone();
+        async move {
+            push_log(&fake.offset_calls, (handle, horizontal, vertical));
+            fake.update_direct_assignment(handle, |template| {
+                template.horizontal_offset = horizontal;
+                template.vertical_offset = vertical;
+            });
+            fake.update_direct_assignment_after_refresh(handle, |template| {
+                template.horizontal_offset = horizontal;
+                template.vertical_offset = vertical;
             });
             Ok(())
         }

@@ -449,6 +449,25 @@ impl WallpaperEngine {
             .await
     }
 
+    pub async fn set_offset(
+        &self,
+        handle: SceneHandle,
+        horizontal: f64,
+        vertical: f64,
+    ) -> Result<(), EngineError> {
+        if !horizontal.is_finite() || !vertical.is_finite() {
+            return Err(EngineError::InvalidInput(
+                "wallpaper offsets must be finite".to_string(),
+            ));
+        }
+        self.ask_actor(messages::SetOffset {
+            handle,
+            horizontal,
+            vertical,
+        })
+        .await
+    }
+
     /// Live-updates the target FPS for one scene.
     ///
     /// # Errors

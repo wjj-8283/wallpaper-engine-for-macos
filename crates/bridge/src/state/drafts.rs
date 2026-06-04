@@ -262,6 +262,39 @@ impl WallpaperOptionsDraft {
         Ok(())
     }
 
+    pub fn set_offset(
+        &mut self,
+        selector: SerializedSelector,
+        horizontal: f64,
+        vertical: f64,
+    ) -> Result<WallpaperConfig, BridgeError> {
+        if !horizontal.is_finite() || !vertical.is_finite() {
+            return Err(BridgeError::invalid_input(
+                "wallpaper offsets must be finite",
+            ));
+        }
+        let render = self.ensure_monitor_render(selector.clone());
+        render.horizontal_offset = horizontal;
+        render.vertical_offset = vertical;
+        let committed = self
+            .committed
+            .monitors
+            .iter_mut()
+            .find(|render| render.selector == selector);
+        if let Some(render) = committed {
+            render.horizontal_offset = horizontal;
+            render.vertical_offset = vertical;
+        } else {
+            self.committed.monitors.push(MonitorRender {
+                selector,
+                horizontal_offset: horizontal,
+                vertical_offset: vertical,
+                ..MonitorRender::default()
+            });
+        }
+        Ok(self.committed.clone())
+    }
+
     pub fn set_target_fps(&mut self, selector: SerializedSelector, fps: u32, max_fps: u32) {
         self.ensure_monitor_render(selector).fps = fps.min(max_fps.max(1));
     }
