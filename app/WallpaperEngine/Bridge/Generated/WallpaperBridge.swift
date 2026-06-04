@@ -2936,6 +2936,7 @@ public struct BridgeSettingsSnapshot {
     public var gitSha: String
     public var bridgeVersion: String
     public var coreVersion: String
+    public var webVersion: String
     public var shaderPipelineVersion: String
     public var storage: BridgeStorageStatus
     public var workshopDir: String
@@ -2943,7 +2944,7 @@ public struct BridgeSettingsSnapshot {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displays: [BridgeDisplaySettingsRow], launchAtLoginAvailable: Bool, launchAtLoginEnabled: Bool, pauseOnBatteryPower: Bool, gitSha: String, bridgeVersion: String, coreVersion: String, shaderPipelineVersion: String, storage: BridgeStorageStatus, workshopDir: String, assetsDir: String) {
+    public init(displays: [BridgeDisplaySettingsRow], launchAtLoginAvailable: Bool, launchAtLoginEnabled: Bool, pauseOnBatteryPower: Bool, gitSha: String, bridgeVersion: String, coreVersion: String, webVersion: String, shaderPipelineVersion: String, storage: BridgeStorageStatus, workshopDir: String, assetsDir: String) {
         self.displays = displays
         self.launchAtLoginAvailable = launchAtLoginAvailable
         self.launchAtLoginEnabled = launchAtLoginEnabled
@@ -2951,6 +2952,7 @@ public struct BridgeSettingsSnapshot {
         self.gitSha = gitSha
         self.bridgeVersion = bridgeVersion
         self.coreVersion = coreVersion
+        self.webVersion = webVersion
         self.shaderPipelineVersion = shaderPipelineVersion
         self.storage = storage
         self.workshopDir = workshopDir
@@ -2983,6 +2985,9 @@ extension BridgeSettingsSnapshot: Equatable, Hashable {
         if lhs.coreVersion != rhs.coreVersion {
             return false
         }
+        if lhs.webVersion != rhs.webVersion {
+            return false
+        }
         if lhs.shaderPipelineVersion != rhs.shaderPipelineVersion {
             return false
         }
@@ -3006,6 +3011,7 @@ extension BridgeSettingsSnapshot: Equatable, Hashable {
         hasher.combine(gitSha)
         hasher.combine(bridgeVersion)
         hasher.combine(coreVersion)
+        hasher.combine(webVersion)
         hasher.combine(shaderPipelineVersion)
         hasher.combine(storage)
         hasher.combine(workshopDir)
@@ -3028,6 +3034,7 @@ public struct FfiConverterTypeBridgeSettingsSnapshot: FfiConverterRustBuffer {
                 gitSha: FfiConverterString.read(from: &buf), 
                 bridgeVersion: FfiConverterString.read(from: &buf), 
                 coreVersion: FfiConverterString.read(from: &buf), 
+                webVersion: FfiConverterString.read(from: &buf),
                 shaderPipelineVersion: FfiConverterString.read(from: &buf), 
                 storage: FfiConverterTypeBridgeStorageStatus.read(from: &buf),
                 workshopDir: FfiConverterString.read(from: &buf),
@@ -3043,6 +3050,7 @@ public struct FfiConverterTypeBridgeSettingsSnapshot: FfiConverterRustBuffer {
         FfiConverterString.write(value.gitSha, into: &buf)
         FfiConverterString.write(value.bridgeVersion, into: &buf)
         FfiConverterString.write(value.coreVersion, into: &buf)
+        FfiConverterString.write(value.webVersion, into: &buf)
         FfiConverterString.write(value.shaderPipelineVersion, into: &buf)
         FfiConverterTypeBridgeStorageStatus.write(value.storage, into: &buf)
         FfiConverterString.write(value.workshopDir, into: &buf)

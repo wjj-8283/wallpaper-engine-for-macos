@@ -17,6 +17,7 @@ use objc2_app_kit::{NSView, NSWindow};
 use objc2_foundation::{NSString, NSThread, NSURL};
 use serde_json::Value;
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Display settings that must be known before the page loads (cannot rely
 /// on `evaluateJavaScript` which fails silently until the page is ready).
 #[derive(Clone, Debug, Default)]
