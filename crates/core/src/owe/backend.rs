@@ -821,7 +821,7 @@ unsafe extern "C-unwind" fn owe_log_callback(
 }
 
 #[allow(clippy::single_call_fn)]
-unsafe extern "C-unwind" fn owe_first_frame_callback(user_data: *mut c_void) {
+unsafe extern "C" fn owe_first_frame_callback(user_data: *mut c_void) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if user_data.is_null() {
             return;
@@ -836,7 +836,7 @@ unsafe extern "C-unwind" fn owe_first_frame_callback(user_data: *mut c_void) {
 }
 
 #[allow(clippy::single_call_fn)]
-unsafe extern "C-unwind" fn owe_first_frame_callback_drop(user_data: *mut c_void) {
+unsafe extern "C" fn owe_first_frame_callback_drop(user_data: *mut c_void) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if user_data.is_null() {
             return;
