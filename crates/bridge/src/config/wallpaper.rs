@@ -19,6 +19,8 @@ pub struct WallpaperConfig {
     pub r#type: String,
     #[serde(default)]
     pub audio: AudioCfg,
+    #[serde(default = "default_true")]
+    pub inject_web_runtime: bool,
     #[serde(default)]
     pub monitors: Vec<MonitorRender>,
     #[serde(default)]
@@ -32,6 +34,7 @@ impl Default for WallpaperConfig {
             workshop_id: String::new(),
             r#type: String::new(),
             audio: AudioCfg::default(),
+            inject_web_runtime: true,
             monitors: Vec::new(),
             property_overrides: BTreeMap::new(),
         }
@@ -121,6 +124,10 @@ impl MonitorRender {
 
 fn default_schema_version() -> u32 {
     SCHEMA_VERSION
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_audio_volume() -> f32 {

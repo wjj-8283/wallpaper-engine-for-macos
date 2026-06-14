@@ -180,6 +180,11 @@ pub struct SetTargetFps {
     pub fps: u32,
 }
 
+pub struct SetInjectWebRuntime {
+    pub wallpaper_id: String,
+    pub inject: bool,
+}
+
 pub struct SetLaunchAtLogin {
     pub enabled: bool,
 }

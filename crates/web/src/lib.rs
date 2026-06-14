@@ -217,6 +217,7 @@ pub unsafe fn install_web_view(
     read_access_root: &Path,
     initial_properties: Option<&Properties>,
     initial_display: &InitialDisplayConfig,
+    inject_runtime: bool,
 ) -> Result<ObjcPtr, WebError> {
     debug_assert!(NSThread::isMainThread_class());
 
@@ -234,7 +235,11 @@ pub unsafe fn install_web_view(
     let config = unsafe { Retained::from_raw(config) }.ok_or_else(|| {
         WebError::Platform("WKWebViewConfiguration allocation returned null".to_string())
     })?;
-    unsafe { install_wallpaper_engine_user_script(&config, initial_properties, initial_display) }?;
+    if inject_runtime {
+        unsafe {
+            install_wallpaper_engine_user_script(&config, initial_properties, initial_display)
+        }?;
+    }
 
     let web_view: *mut AnyObject = unsafe { msg_send![web_view_class, alloc] };
     let web_view: *mut AnyObject =

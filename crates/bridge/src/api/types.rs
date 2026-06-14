@@ -147,6 +147,7 @@ pub struct BridgeWallpaperOptionsSnapshot {
     pub audio_response_enabled: bool,
     pub muted: bool,
     pub volume: f32,
+    pub inject_web_runtime: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]

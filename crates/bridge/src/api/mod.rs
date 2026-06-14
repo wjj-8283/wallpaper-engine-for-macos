@@ -46,10 +46,10 @@ use crate::{
             RefreshLibrary, RestorePropertyDefault, SelectWallpaper, SetAssetsDir,
             SetAudioResponseEnabled, SetDisplayConfigEnabled, SetDisplayEnabled,
             SetDisplayHorizontalFlip, SetDisplayMode, SetFilter, SetGlobalPlayback,
-            SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor, SetMirrorScalingMode,
-            SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted, SetOffset,
-            SetPauseOnBatteryPower, SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume,
-            SetWorkshopDir, Shutdown,
+            SetInjectWebRuntime, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
+            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
+            SetOffset, SetPauseOnBatteryPower, SetScalingFactor, SetScalingMode, SetTargetFps,
+            SetVolume, SetWorkshopDir, Shutdown,
         },
         state::BridgeActorState,
     },
@@ -657,7 +657,7 @@ impl WallpaperBridge {
 
     /// # Errors
     ///
-    /// Returns an error when the wallpaper or display id is unknown.
+    /// Returns an error when the wallpaper id is unknown.
     pub async fn set_display_config_enabled(
         &self,
         wallpaper_id: String,
@@ -743,6 +743,22 @@ impl WallpaperBridge {
                 wallpaper_id,
                 display_id,
                 fps,
+            })
+            .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the wallpaper or display id is unknown.
+    pub async fn set_inject_web_runtime(
+        &self,
+        wallpaper_id: String,
+        inject: bool,
+    ) -> Result<BridgeWallpaperMutationBundle, BridgeError> {
+        self.actor
+            .ask(SetInjectWebRuntime {
+                wallpaper_id,
+                inject,
             })
             .await
     }

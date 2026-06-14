@@ -211,6 +211,39 @@ fn activation_plan_uses_identity_render_override_for_primary_monitor() {
     );
 }
 
+#[test]
+fn activation_plan_carries_web_runtime_injection_override() {
+    let display = identified_display("primary", 1);
+    let app_config = AppConfig {
+        monitors: vec![MonitorCfg {
+            selector: SerializedSelector::Primary,
+            enabled: true,
+            mode: "independent".to_string(),
+            wallpaper: Some("3554238183".to_string()),
+            mirror_target: None,
+        }],
+        ..AppConfig::default()
+    };
+    let mut wallpaper = WallpaperConfig::new_for("3554238183", "web");
+    wallpaper.inject_web_runtime = false;
+    let wallpapers = BTreeMap::from([("3554238183".to_string(), wallpaper)]);
+    let paths = BridgePaths::for_home("/Users/example");
+
+    let scenes = ActivationInputs {
+        app_config: &app_config,
+        wallpapers: &wallpapers,
+        displays: &[display],
+        paused: false,
+        paths: &paths,
+        force_shader_refresh: false,
+    }
+    .build()
+    .unwrap();
+
+    assert_eq!(scenes.len(), 1);
+    assert!(!scenes[0].inject_web_runtime);
+}
+
 fn assert_scene(scenes: &[wallpaper_core::project::SceneDesc], display_id: u32, workshop_id: &str) {
     let scene = scenes
         .iter()

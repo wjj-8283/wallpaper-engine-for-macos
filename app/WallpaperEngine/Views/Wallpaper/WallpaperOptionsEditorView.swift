@@ -98,6 +98,7 @@ struct WallpaperOptionsEditorView: View {
                     resetRevision: localResetRevision,
                     displayIdFilter: displayIdFilter,
                     rowsAreCollapsible: displayRowsAreCollapsible,
+                    controlsDisabled: webRuntimeEditingDisabled,
                     pendingScalingFactors: $pendingScalingFactors,
                     invalidScalingFactorDisplayIds: $invalidScalingFactorDisplayIds,
                     activeDisplayBridgeActionIds: $activeDisplayBridgeActionIds,
@@ -122,13 +123,21 @@ struct WallpaperOptionsEditorView: View {
             }
 
             DisclosureGroup(isExpanded: $propertiesExpanded) {
-                WallpaperPropertiesSection(options: options, onError: onError)
+                WallpaperPropertiesSection(
+                    options: options,
+                    controlsDisabled: webRuntimeEditingDisabled,
+                    onError: onError
+                )
             } label: {
                 Label("Wallpaper Properties", systemImage: "info.circle")
                     .font(.headline)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var webRuntimeEditingDisabled: Bool {
+        options.kind == .webpage && !options.injectWebRuntime
     }
 
     private func resetExpansionIfNeeded(_ wallpaperId: String) {

@@ -6,6 +6,7 @@ struct DisplayConfigurationSection: View {
     let resetRevision: UInt64
     var displayIdFilter: String?
     var rowsAreCollapsible = true
+    var controlsDisabled = false
     @Binding var pendingScalingFactors: [String: Double]
     @Binding var invalidScalingFactorDisplayIds: Set<String>
     @Binding var activeDisplayBridgeActionIds: Set<String>
@@ -32,6 +33,7 @@ struct DisplayConfigurationSection: View {
                         snapshotRevision: snapshotRevision,
                         resetRevision: resetRevision,
                         collapsible: rowsAreCollapsible,
+                        controlsDisabled: controlsDisabled,
                         pendingScalingFactors: $pendingScalingFactors,
                         invalidScalingFactorDisplayIds: $invalidScalingFactorDisplayIds,
                         activeDisplayBridgeActionIds: $activeDisplayBridgeActionIds,
@@ -53,6 +55,7 @@ private struct DisplayConfigurationRow: View {
     let snapshotRevision: UInt64
     let resetRevision: UInt64
     let collapsible: Bool
+    let controlsDisabled: Bool
     @Binding var pendingScalingFactors: [String: Double]
     @Binding var invalidScalingFactorDisplayIds: Set<String>
     @Binding var activeDisplayBridgeActionIds: Set<String>
@@ -75,6 +78,7 @@ private struct DisplayConfigurationRow: View {
         snapshotRevision: UInt64,
         resetRevision: UInt64,
         collapsible: Bool,
+        controlsDisabled: Bool,
         pendingScalingFactors: Binding<[String: Double]>,
         invalidScalingFactorDisplayIds: Binding<Set<String>>,
         activeDisplayBridgeActionIds: Binding<Set<String>>,
@@ -85,6 +89,7 @@ private struct DisplayConfigurationRow: View {
         self.snapshotRevision = snapshotRevision
         self.resetRevision = resetRevision
         self.collapsible = collapsible
+        self.controlsDisabled = controlsDisabled
         _pendingScalingFactors = pendingScalingFactors
         _invalidScalingFactorDisplayIds = invalidScalingFactorDisplayIds
         _activeDisplayBridgeActionIds = activeDisplayBridgeActionIds
@@ -182,7 +187,7 @@ private struct DisplayConfigurationRow: View {
                 Text("Fill").tag(BridgeScalingMode.fill)
             }
             .pickerStyle(.menu)
-            .disabled(!enabled || bridgeActionInProgress)
+            .disabled(!canEditControls)
 
             HStack {
                 Text("Scaling Factor")
@@ -198,7 +203,7 @@ private struct DisplayConfigurationRow: View {
                     }
                     .onSubmit(commitScalingFactor)
             }
-            .disabled(!enabled || bridgeActionInProgress)
+            .disabled(!canEditControls)
 
             offsetControl(
                 title: "Horizontal Offset",
@@ -236,9 +241,9 @@ private struct DisplayConfigurationRow: View {
                         }
                     }
                 )
-                .disabled(!enabled || bridgeActionInProgress)
+                .disabled(!canEditControls)
             }
-            .disabled(!enabled || bridgeActionInProgress)
+            .disabled(!canEditControls)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Volume")
@@ -250,7 +255,7 @@ private struct DisplayConfigurationRow: View {
                         Label(muted ? "Unmute" : "Mute", systemImage: muted ? "speaker.slash" : "speaker.wave.2")
                     }
                     .labelStyle(.iconOnly)
-                    .disabled(!enabled || bridgeActionInProgress)
+                    .disabled(!canEditVolume)
 
                     Slider(
                         value: Binding {
@@ -265,11 +270,11 @@ private struct DisplayConfigurationRow: View {
                             }
                         }
                     )
-                    .disabled(muted || !enabled || bridgeActionInProgress)
+                    .disabled(muted || !canEditVolume)
                     .opacity(muted ? 0.45 : 1.0)
                 }
             }
-            .disabled(!enabled || bridgeActionInProgress)
+            .disabled(!canEditVolume)
 
             if row.canRestoreDefaults {
                 Button("Restore Defaults") {}
@@ -386,7 +391,7 @@ private struct DisplayConfigurationRow: View {
                 }
             )
         }
-        .disabled(!enabled || bridgeActionInProgress)
+        .disabled(!canEditControls)
     }
 
     private func setOffset() {
@@ -430,6 +435,14 @@ private struct DisplayConfigurationRow: View {
             bridgeActionInProgress = false
             activeDisplayBridgeActionIds.remove(row.displayId)
         }
+    }
+
+    private var canEditControls: Bool {
+        enabled && !controlsDisabled && !bridgeActionInProgress
+    }
+
+    private var canEditVolume: Bool {
+        enabled && !bridgeActionInProgress
     }
 }
 

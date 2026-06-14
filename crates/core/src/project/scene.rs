@@ -259,6 +259,9 @@ pub struct SceneDesc {
     pub shader_cache_path: Option<String>,
     /// Whether shader cache entries should be regenerated.
     pub force_shader_refresh: bool,
+    /// Whether web wallpapers should receive the Wallpaper Engine compatibility
+    /// runtime.
+    pub inject_web_runtime: bool,
 }
 
 impl SceneDesc {
@@ -287,6 +290,7 @@ impl SceneDesc {
             property_override_json: None,
             shader_cache_path: None,
             force_shader_refresh: false,
+            inject_web_runtime: true,
         }
     }
 
@@ -324,6 +328,7 @@ impl SceneDesc {
             property_override_json: None,
             shader_cache_path: None,
             force_shader_refresh: false,
+            inject_web_runtime: true,
         }
     }
 
@@ -472,6 +477,7 @@ impl SceneDesc {
             && self.property_override_json == other.property_override_json
             && self.shader_cache_path == other.shader_cache_path
             && self.force_shader_refresh == other.force_shader_refresh
+            && self.inject_web_runtime == other.inject_web_runtime
     }
 
     /// Marks a one-shot shader refresh request as consumed after the renderer
@@ -513,6 +519,9 @@ pub struct SceneTemplate {
     pub shader_cache_path: Option<String>,
     /// Whether shader cache entries should be regenerated.
     pub force_shader_refresh: bool,
+    /// Whether web wallpapers should receive the Wallpaper Engine compatibility
+    /// runtime.
+    pub inject_web_runtime: bool,
 }
 
 impl SceneTemplate {
@@ -540,6 +549,7 @@ impl SceneTemplate {
             property_override_json: None,
             shader_cache_path: None,
             force_shader_refresh: false,
+            inject_web_runtime: true,
         }
     }
 
@@ -562,6 +572,7 @@ impl SceneTemplate {
             property_override_json: scene.property_override_json.clone(),
             shader_cache_path: scene.shader_cache_path.clone(),
             force_shader_refresh: scene.force_shader_refresh,
+            inject_web_runtime: scene.inject_web_runtime,
         }
     }
 
@@ -585,6 +596,7 @@ impl SceneTemplate {
             property_override_json: self.property_override_json.clone(),
             shader_cache_path: self.shader_cache_path.clone(),
             force_shader_refresh: self.force_shader_refresh,
+            inject_web_runtime: self.inject_web_runtime,
         }
     }
 
@@ -632,6 +644,7 @@ pub struct SceneTemplateBuilder {
     property_override_json: Option<String>,
     shader_cache_path: Option<String>,
     force_shader_refresh: bool,
+    inject_web_runtime: bool,
 }
 
 impl SceneTemplateBuilder {
@@ -730,6 +743,14 @@ impl SceneTemplateBuilder {
         self
     }
 
+    /// Controls whether web wallpapers receive the compatibility runtime
+    /// script.
+    #[must_use]
+    pub fn inject_web_runtime(mut self, inject: bool) -> Self {
+        self.inject_web_runtime = inject;
+        self
+    }
+
     /// Validates and returns the scene template.
     pub fn build(self) -> Result<SceneTemplate, EngineError> {
         let template = SceneTemplate {
@@ -748,6 +769,7 @@ impl SceneTemplateBuilder {
             property_override_json: self.property_override_json,
             shader_cache_path: self.shader_cache_path,
             force_shader_refresh: self.force_shader_refresh,
+            inject_web_runtime: self.inject_web_runtime,
         };
         template.validate()?;
         Ok(template)
@@ -829,6 +851,7 @@ pub struct SceneDescBuilder {
     property_override_json: Option<String>,
     shader_cache_path: Option<String>,
     force_shader_refresh: bool,
+    inject_web_runtime: bool,
 }
 
 impl SceneDescBuilder {
@@ -927,6 +950,14 @@ impl SceneDescBuilder {
         self
     }
 
+    /// Controls whether web wallpapers receive the compatibility runtime
+    /// script.
+    #[must_use]
+    pub fn inject_web_runtime(mut self, inject: bool) -> Self {
+        self.inject_web_runtime = inject;
+        self
+    }
+
     /// Validates and returns the scene descriptor.
     ///
     /// # Errors
@@ -967,6 +998,7 @@ impl SceneDescBuilder {
             property_override_json: self.property_override_json,
             shader_cache_path: self.shader_cache_path,
             force_shader_refresh: self.force_shader_refresh,
+            inject_web_runtime: self.inject_web_runtime,
         })
     }
 }

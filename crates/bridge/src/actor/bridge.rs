@@ -30,10 +30,10 @@ use crate::{
             ReplaceLibraryForTest, ReplaceWallpaperConfigForTest, RestorePropertyDefault,
             SelectWallpaper, SetAssetsDir, SetAudioResponseEnabled, SetDisplayConfigEnabled,
             SetDisplayEnabled, SetDisplayHorizontalFlip, SetDisplayMode, SetFilter,
-            SetGlobalPlayback, SetLaunchAtLogin, SetMirrorMuted, SetMirrorScalingFactor,
-            SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps, SetMirrorVolume, SetMuted,
-            SetOffset, SetPauseOnBatteryPower, SetPowerSource, SetScalingFactor, SetScalingMode,
-            SetTargetFps, SetVolume, SetWorkshopDir, Shutdown,
+            SetGlobalPlayback, SetInjectWebRuntime, SetLaunchAtLogin, SetMirrorMuted,
+            SetMirrorScalingFactor, SetMirrorScalingMode, SetMirrorTarget, SetMirrorTargetFps,
+            SetMirrorVolume, SetMuted, SetOffset, SetPauseOnBatteryPower, SetPowerSource,
+            SetScalingFactor, SetScalingMode, SetTargetFps, SetVolume, SetWorkshopDir, Shutdown,
         },
         state::BridgeActorState,
     },
@@ -2421,6 +2421,22 @@ impl<E: EngineFacade + Clone> Message<SetTargetFps> for BridgeActor<E> {
                 .await
                 .map_err(|error| BridgeError::engine(error.to_string()))?;
         }
+        self.bump_generation();
+        self.wallpaper_bundle(msg.wallpaper_id)
+    }
+}
+
+impl<E: EngineFacade + Clone> Message<SetInjectWebRuntime> for BridgeActor<E> {
+    type Reply = messages::WallpaperMutationReply;
+
+    async fn handle(
+        &mut self,
+        msg: SetInjectWebRuntime,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.state
+            .wallpaper_draft_mut(&msg.wallpaper_id)?
+            .set_inject_web_runtime(msg.inject);
         self.bump_generation();
         self.wallpaper_bundle(msg.wallpaper_id)
     }

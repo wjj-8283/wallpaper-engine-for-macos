@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct WallpaperPropertiesSection: View {
     let options: BridgeWallpaperOptionsSnapshot
+    var controlsDisabled = false
     var onError: (Error) -> Void = { _ in }
 
     private var groups: [WallpaperPropertyGroup] {
@@ -23,6 +24,7 @@ struct WallpaperPropertiesSection: View {
                                 WallpaperPropertyRow(
                                     wallpaperId: options.wallpaperId,
                                     property: property,
+                                    controlsDisabled: controlsDisabled,
                                     onError: onError
                                 )
                                 .id("\(options.wallpaperId)-\(property.id)")
@@ -31,6 +33,7 @@ struct WallpaperPropertiesSection: View {
                             WallpaperPropertyDisclosureGroup(
                                 wallpaperId: options.wallpaperId,
                                 group: group,
+                                controlsDisabled: controlsDisabled,
                                 onError: onError
                             )
                             .id("\(options.wallpaperId)-group-\(group.id)")
@@ -90,6 +93,7 @@ private struct WallpaperPropertyGroup: Identifiable {
 private struct WallpaperPropertyDisclosureGroup: View {
     let wallpaperId: String
     let group: WallpaperPropertyGroup
+    let controlsDisabled: Bool
     let onError: (Error) -> Void
     @State private var expanded = false
 
@@ -100,6 +104,7 @@ private struct WallpaperPropertyDisclosureGroup: View {
                     WallpaperPropertyRow(
                         wallpaperId: wallpaperId,
                         property: property,
+                        controlsDisabled: controlsDisabled,
                         onError: onError
                     )
                 }
@@ -133,6 +138,7 @@ private struct WallpaperPropertyRow: View {
 
     let wallpaperId: String
     let property: BridgePropertyDescriptor
+    let controlsDisabled: Bool
     let onError: (Error) -> Void
     @State private var boolValue: Bool
     @State private var numberValue: Double
@@ -143,10 +149,12 @@ private struct WallpaperPropertyRow: View {
     init(
         wallpaperId: String,
         property: BridgePropertyDescriptor,
+        controlsDisabled: Bool,
         onError: @escaping (Error) -> Void
     ) {
         self.wallpaperId = wallpaperId
         self.property = property
+        self.controlsDisabled = controlsDisabled
         self.onError = onError
         _boolValue = State(initialValue: property.value.boolValue ?? false)
         _numberValue = State(initialValue: property.value.numberValue ?? 0)
@@ -173,7 +181,7 @@ private struct WallpaperPropertyRow: View {
                             restoreDefault()
                         }
                         .buttonStyle(.link)
-                        .disabled(bridgeActionInProgress)
+                        .disabled(propertyControlsDisabled || bridgeActionInProgress)
                     }
 
                     Toggle("", isOn: Binding {
@@ -185,7 +193,7 @@ private struct WallpaperPropertyRow: View {
                     })
                     .labelsHidden()
                     .toggleStyle(.switch)
-                    .disabled(!property.enabled || bridgeActionInProgress)
+                    .disabled(!canEdit)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -205,12 +213,12 @@ private struct WallpaperPropertyRow: View {
                                 restoreDefault()
                             }
                             .buttonStyle(.link)
-                            .disabled(bridgeActionInProgress)
+                            .disabled(propertyControlsDisabled || bridgeActionInProgress)
                         }
                     }
 
                     control
-                        .disabled(!property.enabled || bridgeActionInProgress)
+                        .disabled(!canEdit)
                 }
             }
         }
@@ -294,7 +302,7 @@ private struct WallpaperPropertyRow: View {
                             textValue = ""
                         }
                     }
-                    .disabled(bridgeActionInProgress)
+                    .disabled(!canEdit)
                 }
 
                 Button {
@@ -302,7 +310,7 @@ private struct WallpaperPropertyRow: View {
                 } label: {
                     Label("Choose Image", systemImage: "photo.badge.plus")
                 }
-                .disabled(bridgeActionInProgress)
+                .disabled(!canEdit)
             }
         case .combo, .text, .group, .unknown:
             Text("Unsupported property type.")
@@ -366,6 +374,19 @@ private struct WallpaperPropertyRow: View {
 
     private var sliderMetadata: SliderMetadata {
         SliderMetadata(property.slider)
+    }
+
+    private var canEdit: Bool {
+        property.enabled && !propertyControlsDisabled && !bridgeActionInProgress
+    }
+
+    private var propertyControlsDisabled: Bool {
+        controlsDisabled && !isSchemeColorProperty
+    }
+
+    private var isSchemeColorProperty: Bool {
+        property.id == "schemecolor"
+            || property.labelHtml.contains("ui_browse_properties_scheme_color")
     }
 }
 

@@ -289,7 +289,8 @@ impl SceneDescBuilderExt for SceneDescBuilder {
             .audio_volume(audio_volume.into())
             .audio_muted(context.wallpaper.audio.muted)
             .shader_cache_path(context.paths.shader_cache_root().to_string_lossy())
-            .force_shader_refresh(context.force_shader_refresh);
+            .force_shader_refresh(context.force_shader_refresh)
+            .inject_web_runtime(context.wallpaper.inject_web_runtime);
 
         if let Some(json) = property_override_json {
             builder = builder.property_override_json(json);

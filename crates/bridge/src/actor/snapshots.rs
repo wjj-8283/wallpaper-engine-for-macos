@@ -165,6 +165,7 @@ impl BridgeActorState {
             audio_response_enabled: config.audio.response_enabled,
             muted: config.audio.muted,
             volume: config.audio.volume,
+            inject_web_runtime: config.inject_web_runtime,
         })
     }
 

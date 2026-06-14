@@ -178,7 +178,12 @@ impl SceneRuntime {
                 vertical_offset: desc.vertical_offset,
                 fps: desc.fps,
             };
-            window.install_web_view(&web_entry, Some(&web_properties), &initial_display)?;
+            window.install_web_view(
+                &web_entry,
+                Some(&web_properties),
+                &initial_display,
+                desc.inject_web_runtime,
+            )?;
             let web_runtime = wallpaper_web::Runtime::start(
                 move || {
                     backend

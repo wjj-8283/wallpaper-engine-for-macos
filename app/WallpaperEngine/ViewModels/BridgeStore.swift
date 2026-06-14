@@ -134,6 +134,14 @@ final class BridgeStore {
         apply(bundle)
     }
 
+    func setInjectWebRuntimeAsync(wallpaperId: String, inject: Bool) async throws {
+        let bundle = try await bridge.setInjectWebRuntime(
+            wallpaperId: wallpaperId,
+            inject: inject
+        )
+        apply(bundle)
+    }
+
     func editPropertyAsync(
         wallpaperId: String,
         propertyId: String,

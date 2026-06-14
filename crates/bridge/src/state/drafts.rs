@@ -299,6 +299,10 @@ impl WallpaperOptionsDraft {
         self.ensure_monitor_render(selector).fps = fps.min(max_fps.max(1));
     }
 
+    pub fn set_inject_web_runtime(&mut self, inject: bool) {
+        self.current.inject_web_runtime = inject;
+    }
+
     #[must_use]
     pub fn set_target_fps_immediate(
         &mut self,
