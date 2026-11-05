@@ -9,10 +9,15 @@ permissions:
   contents: read
   actions: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build
     runs-on: macos-26
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -43,12 +48,54 @@ jobs:
       - name: Build
         run: nix build
 
-      - name: Package Applications artifact
-        run: sudo hdiutil create -volname "Wallpaper Engine for macOS" -srcfolder result/Applications -ov -format UDZO "Wallpaper Engine for macOS.dmg"
+      - name: Package DMG
+        id: dmg
+        run: |
+          set -euo pipefail
 
-      - name: Upload Applications artifact
+          APP="result/Applications/Wallpaper Engine.app"
+          if [[ ! -d "$APP" ]]; then
+            echo "error: app bundle not found at $APP" >&2
+            ls -R result >&2 || true
+            exit 1
+          fi
+
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            DMG_NAME="Wallpaper-Engine-${GITHUB_REF_NAME}-${SHORT_SHA}"
+          else
+            DMG_NAME="Wallpaper-Engine-${VERSION}-${SHORT_SHA}"
+          fi
+
+          STAGE="$RUNNER_TEMP/dmg-stage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+
+          /usr/bin/hdiutil create \
+            -volname "Wallpaper Engine" \
+            -srcfolder "$STAGE" \
+            -format UDZO \
+            -ov \
+            "${DMG_NAME}.dmg"
+
+          /usr/bin/hdiutil verify "${DMG_NAME}.dmg"
+
+          shasum -a 256 "${DMG_NAME}.dmg" | awk '{ print $1 }' > "${DMG_NAME}.dmg.sha256"
+
+          echo "name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Created ${DMG_NAME}.dmg ($(du -h "${DMG_NAME}.dmg" | cut -f1))"
+
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wallpaper Engine for macOS
-          path: Wallpaper Engine for macOS.dmg
+          name: WallpaperEngine-macOS-dmg
+          path: |
+            *.dmg
+            *.dmg.sha256
           if-no-files-found: error

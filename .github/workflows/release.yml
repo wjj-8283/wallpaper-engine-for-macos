@@ -75,7 +75,7 @@ jobs:
         run: |
           gh run download \
             "${{ steps.build.outputs.run_id }}" \
-            --name "Wallpaper Engine for macOS" \
+            --name "WallpaperEngine-macOS-dmg" \
             --dir release-artifacts
 
       - name: Publish GitHub Release
@@ -86,4 +86,6 @@ jobs:
           name: ${{ steps.metadata.outputs.title }}
           body: "Push date: ${{ steps.build.outputs.push_date }}"
           prerelease: ${{ steps.metadata.outputs.prerelease }}
-          files: release-artifacts/Wallpaper Engine for macOS.dmg
+          files: |
+            release-artifacts/*.dmg
+            release-artifacts/*.dmg.sha256
