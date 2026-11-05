@@ -24,6 +24,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CMAKE");
     println!("cargo:rerun-if-env-changed=CMAKE_BUILD_TYPE");
     println!("cargo:rerun-if-env-changed=OWE_NIX_LIBRARY_PATH");
+    println!("cargo:rerun-if-env-changed=OWE_CMAKE_COMPILER_LAUNCHER");
     println!("cargo:rerun-if-changed={}", owe_source.display());
     println!("cargo:rerun-if-changed={}", owe_bindings_header.display());
     println!("cargo:rerun-if-changed={}", owe_bindings_source.display());
@@ -33,15 +34,27 @@ fn main() {
     // only primitive C-compatible parameters around OWE renderer methods.
     generate_owe_backend_bindings(&owe_bindings_header);
 
-    let dst = cmake::Config::new(&owe_source)
+    let mut cmake = cmake::Config::new(&owe_source);
+    cmake
         .out_dir(&cmake_out_dir)
         .define("BUILD_TESTING", "OFF")
         .define("BUILD_TESTS", "OFF")
         .define("BUILD_WAYWALLEN", "OFF")
         .define("BUILD_QML", "OFF")
-        .define("RUST_SHADER_FFI", "ON")
-        .build_target("wescene-renderer")
-        .build();
+        .define("RUST_SHADER_FFI", "ON");
+
+    // Optional compiler launcher (ccache/sccache) for CI. Unset locally, so the
+    // plain compiler is used and nothing about the build changes.
+    if let Some(launcher) = env::var("OWE_CMAKE_COMPILER_LAUNCHER")
+        .ok()
+        .filter(|launcher| !launcher.is_empty())
+    {
+        for language in ["C", "CXX", "OBJCXX"] {
+            cmake.define(format!("CMAKE_{language}_COMPILER_LAUNCHER"), &launcher);
+        }
+    }
+
+    let dst = cmake.build_target("wescene-renderer").build();
     debug_assert_eq!(dst, cmake_out_dir);
 
     emit_static_link_flags(&cmake_build_dir);

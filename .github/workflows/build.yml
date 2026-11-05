@@ -45,8 +45,50 @@ jobs:
           restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
           gc-max-store-size-macos: 1073741824
 
+      - name: Resolve compiler cache inputs
+        id: cache
+        run: |
+          set -euo pipefail
+
+          DEPS_HASH="$(
+            shasum -a 256 Cargo.lock flake.lock rust-toolchain.toml \
+              | awk '{ print $1 }' \
+              | shasum -a 256 \
+              | cut -c1-16
+          )"
+          ENGINE_SHA="$(git rev-parse HEAD:external/open-wallpaper-engine)"
+
+          echo "deps=${DEPS_HASH}" >> "$GITHUB_OUTPUT"
+          echo "engine=${ENGINE_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore compiler caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            /private/tmp/wallpaper-engine-ci/ccache
+            /private/tmp/wallpaper-engine-ci/sccache
+          key: compilers-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache.outputs.deps }}-${{ steps.cache.outputs.engine }}
+          restore-keys: |
+            compilers-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache.outputs.deps }}-
+            compilers-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Build
-        run: nix build
+        run: nix build -L .#ci
+
+      - name: Report compiler cache stats
+        if: always()
+        run: |
+          for dir in /private/tmp/wallpaper-engine-ci/ccache /private/tmp/wallpaper-engine-ci/sccache; do
+            if [[ -d "$dir" ]]; then
+              echo "$dir: $(du -sh "$dir" | cut -f1)"
+            else
+              echo "$dir: missing"
+            fi
+          done
+
+          if [[ -f /private/tmp/wallpaper-engine-ci/sccache.log ]]; then
+            tail -20 /private/tmp/wallpaper-engine-ci/sccache.log || true
+          fi
 
       - name: Package DMG
         id: dmg
