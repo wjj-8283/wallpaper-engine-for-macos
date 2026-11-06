@@ -8,7 +8,7 @@ on:
       package:
         description: Flake package to build
         type: choice
-        default: ci
+        default: default
         options:
           - ci
           - ciNoMove
@@ -91,7 +91,10 @@ jobs:
           fi
 
       - name: Build
-        run: nix build -L .#${{ inputs.package || 'ci' }}
+        # `ci`/`ciNoMove` add sccache+ccache (see flake.nix) but currently fail
+        # while building the vendored libgit2 sources, so the default is the
+        # plain package. Pick `ci` from workflow_dispatch to experiment.
+        run: nix build -L .#${{ inputs.package || 'default' }}
 
       - name: Dump build diagnostics on failure
         if: failure()

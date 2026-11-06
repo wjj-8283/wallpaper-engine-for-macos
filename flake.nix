@@ -307,8 +307,11 @@
 
         packages.default = mkPackage { };
 
-        # Same derivation plus compiler caches. Used by CI only; the directories
-        # under `cacheRoot` are persisted between workflow runs.
+        # Same derivation plus compiler caches. Opt-in only: as of today this
+        # fails while compiling the vendored libgit2 sources (the Nix clang
+        # wrapper stops honouring the build script's `-I <OUT_DIR>/include`
+        # once it is given a multi-target `--target`), so CI builds
+        # `packages.default` instead. See the workflow comments.
         packages.ci = mkPackage {
           extraTools = [
             pkgs.ccache
