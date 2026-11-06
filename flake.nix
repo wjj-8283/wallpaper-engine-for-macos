@@ -127,6 +127,8 @@
 
                 mark() { printf '\n=== %s  %s ===\n' "$(date -u '+%H:%M:%S')" "$*"; }
 
+                CARGO_ARGS=()
+
                 if [ -n "''${WALLPAPER_CI_CACHE_ROOT:-}" ]; then
                   mark "relocate build tree into ''$WALLPAPER_CI_CACHE_ROOT/work (stable paths for compiler caches)"
                   mkdir -p "''$WALLPAPER_CI_CACHE_ROOT"
@@ -134,7 +136,40 @@
                   rm -rf "''$WALLPAPER_CI_CACHE_ROOT/work"
                   mkdir -p "''$WALLPAPER_CI_CACHE_ROOT/work"
                   cp -a . "''$WALLPAPER_CI_CACHE_ROOT/work"/
+                  SRC_ROOT="$PWD"
                   cd "''$WALLPAPER_CI_CACHE_ROOT/work"
+
+                  # cargoSetupPostUnpackHook writes `.cargo/config.toml` in the
+                  # build root (the *parent* of the unpacked source tree) and
+                  # points it at an absolute vendored-sources directory. Cargo
+                  # finds it by walking up from the source root, so relocating
+                  # the tree silently drops the vendored source replacement and
+                  # sends cargo to crates.io — which fails, because the build has
+                  # no CA trust store. Bring the config along and re-assert the
+                  # vendored source through the CLI (highest precedence).
+                  if [ -f "$SRC_ROOT/../.cargo/config.toml" ]; then
+                    mkdir -p .cargo
+                    cp "$SRC_ROOT/../.cargo/config.toml" .cargo/config.toml
+                  fi
+
+                  VENDOR_DIR="''${cargoDepsCopy:-$(dirname "$SRC_ROOT")/cargo-vendor-dir}"
+                  echo "--- cargo vendoring ---"
+                  cat .cargo/config.toml 2>&1 || true
+                  echo "vendor directory: $VENDOR_DIR"
+
+                  if [ -d "$VENDOR_DIR" ]; then
+                    cat > "''$WALLPAPER_CI_CACHE_ROOT/cargo-vendor.toml" <<EOF
+                [source."crates-io"]
+                replace-with = "vendored-sources"
+
+                [source."vendored-sources"]
+                directory = "$VENDOR_DIR"
+                EOF
+                    CARGO_ARGS=(--config "''$WALLPAPER_CI_CACHE_ROOT/cargo-vendor.toml" --offline)
+                  else
+                    echo "error: vendored crates directory not found at $VENDOR_DIR" >&2
+                    exit 1
+                  fi
                 fi
 
                 export GIT_SHORT_COMMIT=${self.shortRev or self.dirtyShortRev}
@@ -143,10 +178,11 @@
                 export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$PWD/target}"
 
                 mark "cargo build (rust workspace)"
-                cargo build --workspace --release
+                cargo build "''${CARGO_ARGS[@]}" --workspace --release
 
                 mark "cargo build (uniffi-bindgen)"
                 cargo build \
+                    "''${CARGO_ARGS[@]}" \
                     --release \
                     -p wallpaper-bridge \
                     --bin uniffi-bindgen
