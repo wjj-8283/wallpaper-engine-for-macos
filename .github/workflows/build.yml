@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      package:
+        description: Flake package to build
+        type: choice
+        default: ci
+        options:
+          - ci
+          - default
 
 permissions:
   contents: read
@@ -73,7 +81,17 @@ jobs:
             compilers-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Build
-        run: nix build -L .#ci
+        run: nix build -L .#${{ inputs.package || 'ci' }}
+
+      - name: Dump build diagnostics on failure
+        if: failure()
+        run: |
+          set +e
+          for d in /private/tmp/wallpaper-engine-ci/work/target/release/build/libgit2-sys-*/out; do
+            echo "=== $d ==="
+            ls -la "$d"
+            ls -la "$d/include" 2>&1 | head -20
+          done
 
       - name: Report compiler cache stats
         if: always()

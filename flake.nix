@@ -157,6 +157,14 @@
                   cat .cargo/config.toml 2>&1 || true
                   echo "vendor directory: $VENDOR_DIR"
 
+                  echo "--- vendored libgit2-sys layout ---"
+                  for crate in "$VENDOR_DIR"/libgit2-sys-*; do
+                    echo "crate: $crate"
+                    ls -la "$crate" 2>&1 | head -12
+                    ls -la "$crate/libgit2" 2>&1 | head -8
+                    ls -la "$crate/libgit2/include" 2>&1 | head -8
+                  done
+
                   if [ -d "$VENDOR_DIR" ]; then
                     cat > "''$WALLPAPER_CI_CACHE_ROOT/cargo-vendor.toml" <<EOF
                 [source."crates-io"]
