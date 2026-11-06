@@ -81,6 +81,15 @@ jobs:
             compilers-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache.outputs.deps }}-
             compilers-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Make compiler caches writable
+        run: |
+          set -euo pipefail
+          # Nix builds run as an unprivileged build user; the cache is restored
+          # as the runner user. Both need to write into the same directories.
+          if [[ -d /private/tmp/wallpaper-engine-ci ]]; then
+            sudo chmod -R a+rwX /private/tmp/wallpaper-engine-ci
+          fi
+
       - name: Build
         run: nix build -L .#${{ inputs.package || 'ci' }}
 
