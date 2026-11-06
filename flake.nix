@@ -277,6 +277,31 @@
 
         packages.default = mkPackage { };
 
+        # Compiler cache environment shared by the CI packages. `packages.ci`
+        # additionally relocates the build tree to a fixed path so the caches can
+        # actually hit; `packages.ciNoMove` keeps every path as-is and exists to
+        # bisect build failures introduced by the relocation.
+        ciEnv = {
+          # ccache: C++/ObjC++ from the vendored Vulkan renderer.
+          CCACHE_DIR = "${cacheRoot}/ccache";
+          CCACHE_BASEDIR = cacheRoot;
+          CCACHE_NOHASHDIR = "1";
+          CCACHE_COMPRESS = "1";
+          CCACHE_MAXSIZE = "1G";
+          CCACHE_UMASK = "000";
+
+          # sccache: every rustc invocation, including the 300+ crates from
+          # Cargo.lock.
+          SCCACHE_DIR = "${cacheRoot}/sccache";
+          SCCACHE_CACHE_SIZE = "3G";
+          SCCACHE_ERROR_LOG = "${cacheRoot}/sccache.log";
+          RUSTC_WRAPPER = "${rustcWrapper}/bin/rustc-sccache";
+
+          OWE_CMAKE_COMPILER_LAUNCHER = "${cmakeLauncher}/bin/ccache-launcher";
+
+          CARGO_INCREMENTAL = "0";
+        };
+
         # Same derivation plus compiler caches. Used by CI only; the directories
         # under `cacheRoot` are persisted between workflow runs.
         packages.ci = mkPackage {
@@ -285,28 +310,18 @@
             pkgs.sccache
           ];
 
-          extraEnv = {
+          extraEnv = ciEnv // {
             WALLPAPER_CI_CACHE_ROOT = cacheRoot;
-
-            # ccache: C++/ObjC++ from the vendored Vulkan renderer.
-            CCACHE_DIR = "${cacheRoot}/ccache";
-            CCACHE_BASEDIR = cacheRoot;
-            CCACHE_NOHASHDIR = "1";
-            CCACHE_COMPRESS = "1";
-            CCACHE_MAXSIZE = "1G";
-            CCACHE_UMASK = "000";
-
-            # sccache: every rustc invocation, including the 300+ crates from
-            # Cargo.lock.
-            SCCACHE_DIR = "${cacheRoot}/sccache";
-            SCCACHE_CACHE_SIZE = "3G";
-            SCCACHE_ERROR_LOG = "${cacheRoot}/sccache.log";
-            RUSTC_WRAPPER = "${rustcWrapper}/bin/rustc-sccache";
-
-            OWE_CMAKE_COMPILER_LAUNCHER = "${cmakeLauncher}/bin/ccache-launcher";
-
-            CARGO_INCREMENTAL = "0";
           };
+        };
+
+        packages.ciNoMove = mkPackage {
+          extraTools = [
+            pkgs.ccache
+            pkgs.sccache
+          ];
+
+          extraEnv = ciEnv;
         };
       }
     );

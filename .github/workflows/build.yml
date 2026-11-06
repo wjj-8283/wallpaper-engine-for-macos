@@ -11,6 +11,7 @@ on:
         default: ci
         options:
           - ci
+          - ciNoMove
           - default
 
 permissions:
